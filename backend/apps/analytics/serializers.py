@@ -1,0 +1,22 @@
+"""
+Analytics serializers
+"""
+from rest_framework import serializers
+from .models import FleetAnalytics
+
+
+class FleetAnalyticsSerializer(serializers.ModelSerializer):
+    """Serializer for FleetAnalytics"""
+    
+    class Meta:
+        model = FleetAnalytics
+        fields = [
+            'id', 'timestamp',
+            'total_drones', 'active_drones', 'drones_in_flight', 'drones_in_maintenance',
+            'total_orders', 'pending_orders', 'completed_orders', 'failed_orders',
+            'avg_delivery_time_minutes', 'avg_eta_accuracy_percentage', 'total_distance_km',
+            'avg_battery_level', 'low_battery_count',
+            'fleet_uptime_percentage'
+        ]
+        read_only_fields = ['id', 'timestamp']
+

@@ -1,0 +1,45 @@
+import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
+
+interface User {
+  id: number
+  username: string
+  email: string
+  role: 'admin' | 'manager' | 'customer'
+}
+
+interface AuthState {
+  user: User | null
+  accessToken: string | null
+  refreshToken: string | null
+  setAuth: (user: User, accessToken: string, refreshToken: string) => void
+  logout: () => void
+  isAuthenticated: () => boolean
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      accessToken: null,
+      refreshToken: null,
+      
+      setAuth: (user, accessToken, refreshToken) => {
+        set({ user, accessToken, refreshToken })
+      },
+      
+      logout: () => {
+        set({ user: null, accessToken: null, refreshToken: null })
+      },
+      
+      isAuthenticated: () => {
+        return get().accessToken !== null && get().user !== null
+      },
+    }),
+    {
+      name: 'addms-auth',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+)
+
