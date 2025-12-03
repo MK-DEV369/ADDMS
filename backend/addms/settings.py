@@ -17,6 +17,8 @@ env = environ.Env(
 )
 
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+GDAL_LIBRARY_PATH="E:\Anaconda\Library\bin\gdal.dll"
+GEOS_LIBRARY_PATH="E:\Anaconda\Library\bin\geos_c.dll"
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-change-me-in-production-addms-2024')

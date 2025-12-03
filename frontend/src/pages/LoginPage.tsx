@@ -26,12 +26,21 @@ export default function LoginPage() {
       const { access, refresh } = response.data
       
       // Fetch user profile
-      const userResponse = await api.get('/auth/profile/')
+      const userResponse = await api.get('/auth/profile/', {
+        headers: {
+          Authorization: `Bearer ${access}`,
+        },
+      })
+      
+      console.log("LOGIN RESPONSE:", userResponse)
       const user = userResponse.data
+      console.log("LOGIN RESPONSE:", user)
+
       
       setAuth(user, access, refresh)
       navigate('/dashboard')
     } catch (err: any) {
+      console.log(import.meta.env.VITE_API_URL)
       setError(err.response?.data?.detail || 'Login failed')
       console.error('Login error:', err)
     } finally {
