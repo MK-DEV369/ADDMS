@@ -13,7 +13,8 @@ from .serializers import (
     UserSerializer,
     UserRegistrationSerializer,
     CustomTokenObtainPairSerializer,
-    ChangePasswordSerializer
+    ChangePasswordSerializer,
+    ForgotPasswordSerializer
 )
 
 User = get_user_model()
@@ -73,7 +74,7 @@ class UserListView(generics.ListAPIView):
 def change_password(request):
     """Change password endpoint"""
     serializer = ChangePasswordSerializer(data=request.data)
-    
+
     if serializer.is_valid():
         user = request.user
         if not user.check_password(serializer.data.get('old_password')):
@@ -81,12 +82,37 @@ def change_password(request):
                 {"old_password": ["Wrong password."]},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         user.set_password(serializer.data.get('new_password'))
         user.save()
         update_session_auth_hash(request, user)
         logger.info("Password changed", namespace="users", user_id=user.id)
         return Response({"message": "Password changed successfully."}, status=status.HTTP_200_OK)
-    
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def forgot_password(request):
+    """Forgot password endpoint"""
+    serializer = ForgotPasswordSerializer(data=request.data)
+
+    if serializer.is_valid():
+        username = serializer.data.get('username')
+        new_password = serializer.data.get('new_password')
+
+        try:
+            user = User.objects.get(username=username)
+            user.set_password(new_password)
+            user.save()
+            logger.info("Password reset", namespace="users", user_id=user.id)
+            return Response({"message": "Password reset successfully."}, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response(
+                {"username": ["User not found."]},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

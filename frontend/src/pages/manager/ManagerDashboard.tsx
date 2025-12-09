@@ -4,17 +4,32 @@ import {
   TrendingUp, Package, Users, Activity, Settings, Map,
   Calendar, Wind, Droplets, Eye, Navigation, Zap
 } from 'lucide-react';
+import Map3D from '@/components/Map3D'
 
 // Types
 interface Drone {
-  id: string;
-  model: string;
-  status: 'active' | 'idle' | 'maintenance' | 'emergency' | 'offline';
-  battery: number;
-  location: { lat: number; lon: number; alt: number };
-  currentTask?: string;
-  lastUpdate: string;
+  id: number
+  serialNumber: string
+  position: { lat: number; lng: number; altitude: number }
+  heading?: number
+  pitch?: number
+  roll?: number
+  status?: 'active' | 'idle' | 'maintenance' | 'emergency' | 'offline'
+  battery: number
 }
+
+const mockRoutes = [
+  {
+    id: 1,
+    path: [
+      { lat: 12.9716, lng: 77.5946, altitude: 100 },
+      { lat: 12.9730, lng: 77.5960, altitude: 110 },
+      { lat: 12.9750, lng: 77.5980, altitude: 120 }
+    ],
+    color: '#00FFFF',
+    completed: false
+  }
+]
 
 interface Delivery {
   id: string;
@@ -28,13 +43,21 @@ interface Delivery {
   priority: 'standard' | 'express' | 'urgent';
 }
 
+// interface Zone {
+//   id: string;
+//   name: string;
+//   type: 'operational' | 'no-fly';
+//   deliveryCount?: number;
+//   avgCompletionTime?: number;
+//   status: 'active' | 'inactive';
+// }
+
 interface Zone {
-  id: string;
-  name: string;
-  type: 'operational' | 'no-fly';
-  deliveryCount?: number;
-  avgCompletionTime?: number;
-  status: 'active' | 'inactive';
+  id: number
+  name: string
+  type: 'operational' | 'no-fly'
+  polygon: Array<{ lat: number; lng: number }>
+  altitudeRange?: { min: number; max: number }
 }
 
 interface Weather {
@@ -49,13 +72,31 @@ interface Weather {
 }
 
 // Mock data
+// const mockDrones: Drone[] = [
+//   { id: 'D001', model: 'Skyward X2', status: 'active', battery: 85, location: { lat: 12.9716, lon: 77.5946, alt: 120 }, currentTask: 'Delivery #1234', lastUpdate: '2 min ago' },
+//   { id: 'D002', model: 'Skyward X2', status: 'idle', battery: 92, location: { lat: 12.9516, lon: 77.6046, alt: 0 }, lastUpdate: '5 min ago' },
+//   { id: 'D003', model: 'Cargo Pro', status: 'active', battery: 45, location: { lat: 12.9916, lon: 77.5846, alt: 150 }, currentTask: 'Delivery #1235', lastUpdate: '1 min ago' },
+//   { id: 'D004', model: 'Skyward X2', status: 'maintenance', battery: 100, location: { lat: 12.9616, lon: 77.5946, alt: 0 }, lastUpdate: '30 min ago' },
+//   { id: 'D005', model: 'Cargo Pro', status: 'idle', battery: 78, location: { lat: 12.9816, lon: 77.6146, alt: 0 }, lastUpdate: '3 min ago' },
+//   { id: 'D006', model: 'Skyward X2', status: 'emergency', battery: 15, location: { lat: 12.9416, lon: 77.5746, alt: 80 }, currentTask: 'Delivery #1236', lastUpdate: 'Just now' },
+// ];
+
 const mockDrones: Drone[] = [
-  { id: 'D001', model: 'Skyward X2', status: 'active', battery: 85, location: { lat: 12.9716, lon: 77.5946, alt: 120 }, currentTask: 'Delivery #1234', lastUpdate: '2 min ago' },
-  { id: 'D002', model: 'Skyward X2', status: 'idle', battery: 92, location: { lat: 12.9516, lon: 77.6046, alt: 0 }, lastUpdate: '5 min ago' },
-  { id: 'D003', model: 'Cargo Pro', status: 'active', battery: 45, location: { lat: 12.9916, lon: 77.5846, alt: 150 }, currentTask: 'Delivery #1235', lastUpdate: '1 min ago' },
-  { id: 'D004', model: 'Skyward X2', status: 'maintenance', battery: 100, location: { lat: 12.9616, lon: 77.5946, alt: 0 }, lastUpdate: '30 min ago' },
-  { id: 'D005', model: 'Cargo Pro', status: 'idle', battery: 78, location: { lat: 12.9816, lon: 77.6146, alt: 0 }, lastUpdate: '3 min ago' },
-  { id: 'D006', model: 'Skyward X2', status: 'emergency', battery: 15, location: { lat: 12.9416, lon: 77.5746, alt: 80 }, currentTask: 'Delivery #1236', lastUpdate: 'Just now' },
+  {
+    id: 1,
+    serialNumber: 'D001',
+    position: { lat: 12.9716, lng: 77.5946, altitude: 120 },
+    status: 'active',
+    battery: 85,
+  },
+  {
+    id: 2,
+    serialNumber: 'D002',
+    position: { lat: 12.9516, lng: 77.6046, altitude: 0 },
+    status: 'idle',
+    battery: 92,
+  },
+  // Add more drones as needed
 ];
 
 const mockDeliveries: Delivery[] = [
@@ -66,11 +107,40 @@ const mockDeliveries: Delivery[] = [
   { id: '5', orderId: '#1238', customer: 'Charlie Davis', pickup: 'Warehouse B', dropoff: 'Jayanagar', status: 'pending', priority: 'express' },
 ];
 
+// const mockZones: Zone[] = [
+//   { id: 'Z001', name: 'Central Zone', type: 'operational', deliveryCount: 145, avgCompletionTime: 18, status: 'active' },
+//   { id: 'Z002', name: 'East Zone', type: 'operational', deliveryCount: 98, avgCompletionTime: 22, status: 'active' },
+//   { id: 'Z003', name: 'Airport NFZ', type: 'no-fly', status: 'active' },
+//   { id: 'Z004', name: 'Military Base NFZ', type: 'no-fly', status: 'active' },
+// ];
+
 const mockZones: Zone[] = [
-  { id: 'Z001', name: 'Central Zone', type: 'operational', deliveryCount: 145, avgCompletionTime: 18, status: 'active' },
-  { id: 'Z002', name: 'East Zone', type: 'operational', deliveryCount: 98, avgCompletionTime: 22, status: 'active' },
-  { id: 'Z003', name: 'Airport NFZ', type: 'no-fly', status: 'active' },
-  { id: 'Z004', name: 'Military Base NFZ', type: 'no-fly', status: 'active' },
+  {
+    id: 1,
+    name: 'Central Zone',
+    type: 'operational',
+    polygon: [{ lat: 12.9716, lng: 77.5946 }, { lat: 12.9730, lng: 77.5960 }, { lat: 12.9750, lng: 77.5980 }],
+    altitudeRange: { min: 100, max: 150 },
+  },
+  {
+    id: 2,
+    name: 'East Zone',
+    type: 'operational',
+    polygon: [{ lat: 12.9516, lng: 77.6046 }, { lat: 12.9530, lng: 77.6060 }, { lat: 12.9550, lng: 77.6080 }],
+    altitudeRange: { min: 100, max: 150 },
+  },
+  {
+    id: 3,
+    name: 'Airport NFZ',
+    type: 'no-fly',
+    polygon: [{ lat: 12.9900, lng: 77.6100 }, { lat: 12.9920, lng: 77.6120 }, { lat: 12.9940, lng: 77.6140 }],
+  },
+  {
+    id: 4,
+    name: 'Military Base NFZ',
+    type: 'no-fly',
+    polygon: [{ lat: 12.9800, lng: 77.6200 }, { lat: 12.9820, lng: 77.6220 }, { lat: 12.9840, lng: 77.6240 }],
+  }
 ];
 
 const mockWeather: Weather[] = [
@@ -80,7 +150,7 @@ const mockWeather: Weather[] = [
 
 export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<'fleet' | 'deliveries' | 'zones' | 'weather' | 'analytics'>('fleet');
-  const [selectedDrone, setSelectedDrone] = useState<string | null>(null);
+  const [selectedDrone, setSelectedDrone] = useState<number | null>(null);
   const [drones, setDrones] = useState<Drone[]>(mockDrones);
   const [deliveries, setDeliveries] = useState<Delivery[]>(mockDeliveries);
   const [isAssigning, setIsAssigning] = useState(false);
@@ -93,11 +163,10 @@ export default function ManagerDashboard() {
         if (drone.status === 'active' && drone.battery > 20) {
           return {
             ...drone,
-            battery: Math.max(15, drone.battery - Math.random() * 2),
+            battery: drone.battery,
             location: {
-              ...drone.location,
-              lat: drone.location.lat + (Math.random() - 0.5) * 0.01,
-              lon: drone.location.lon + (Math.random() - 0.5) * 0.01,
+              lat: drone.position.lat,
+              lon: drone.position.lng,
             }
           };
         }
@@ -126,17 +195,18 @@ export default function ManagerDashboard() {
     
     return { pending, inTransit, total: deliveries.length };
   }, [deliveries]);
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      active: 'bg-green-500',
-      idle: 'bg-blue-500',
-      maintenance: 'bg-yellow-500',
-      emergency: 'bg-red-500',
-      offline: 'bg-gray-500',
-    };
-    return colors[status] || 'bg-gray-500';
+  
+const getStatusColor = (status: 'active' | 'idle' | 'maintenance' | 'emergency' | 'offline' | undefined): string => {
+  const colors: Record<string, string> = {
+    active: 'bg-green-500',
+    idle: 'bg-blue-500',
+    maintenance: 'bg-yellow-500',
+    emergency: 'bg-red-500',
+    offline: 'bg-gray-500',
   };
+  
+  return status ? colors[status] || 'bg-gray-500' : 'bg-gray-500';
+};
 
   const getPriorityColor = (priority: string) => {
     const colors: Record<string, string> = {
@@ -153,9 +223,13 @@ export default function ManagerDashboard() {
       setDeliveries(prev => prev.map(d => 
         d.id === deliveryId ? { ...d, droneId, status: 'assigned', eta: `${15 + Math.floor(Math.random() * 20)} min` } : d
       ));
-      setDrones(prev => prev.map(dr => 
-        dr.id === droneId ? { ...dr, status: 'active', currentTask: deliveries.find(d => d.id === deliveryId)?.orderId } : dr
-      ));
+      setDrones(prev => prev.map(drone => 
+      drone.serialNumber === droneId ? { 
+        ...drone, 
+        status: 'active', 
+        currentTask: deliveries.find(d => d.id === deliveryId)?.orderId 
+      } : drone
+    ));
       setIsAssigning(false);
       setSelectedDelivery(null);
     }, 1000);
@@ -279,37 +353,15 @@ export default function ManagerDashboard() {
             {activeTab === 'fleet' && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* 3D Map Placeholder */}
-                <div className="lg:col-span-2">
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg h-[600px] border border-blue-200 flex items-center justify-center relative overflow-hidden">
-                    <div className="absolute inset-0 opacity-10">
-                      <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-blue-500 rounded-full blur-3xl" />
-                      <div className="absolute bottom-1/4 right-1/4 w-40 h-40 bg-purple-500 rounded-full blur-3xl" />
-                    </div>
-                    <div className="text-center z-10">
-                      <Map className="w-16 h-16 text-blue-400 mx-auto mb-4" />
-                      <h3 className="text-xl font-semibold text-gray-700 mb-2">3D Map View</h3>
-                      <p className="text-gray-500 mb-4">CesiumJS integration for live drone tracking</p>
-                      <div className="bg-white rounded-lg p-4 inline-block shadow-sm">
-                        <div className="flex items-center gap-3 text-sm">
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                            <span>{fleetStats.active} Active</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                            <span>{fleetStats.idle} Idle</span>
-                          </div>
-                          {fleetStats.emergency > 0 && (
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                              <span>{fleetStats.emergency} Alert</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <Map3D
+                  drones={mockDrones}
+                  routes={mockRoutes}
+                  zones={mockZones}
+                  // onDroneClick={handleDroneClick}
+                  followDrone={null} //selectedDroneID
+                  showLabels={true}
+                  showZones={true}
+                />
 
                 {/* Drone List */}
                 <div className="space-y-3">
@@ -335,7 +387,7 @@ export default function ManagerDashboard() {
                             }`} />
                             <div>
                               <div className="font-semibold text-gray-900">{drone.id}</div>
-                              <div className="text-xs text-gray-500">{drone.model}</div>
+                              <div className="text-xs text-gray-500">{drone.serialNumber}</div>
                             </div>
                           </div>
                           <span className={`px-2 py-1 text-xs rounded-full font-medium capitalize ${
@@ -372,17 +424,17 @@ export default function ManagerDashboard() {
                           </div>
                         </div>
 
-                        {drone.currentTask && (
+                        {drone.heading && (
                           <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
                             <Package className="w-3 h-3" />
-                            <span>{drone.currentTask}</span>
+                            <span>{drone.heading}</span>
                           </div>
                         )}
 
                         <div className="flex items-center gap-2 text-xs text-gray-500">
                           <MapPin className="w-3 h-3" />
-                          <span>{drone.location.lat.toFixed(4)}, {drone.location.lon.toFixed(4)}</span>
-                          <span className="ml-auto">{drone.lastUpdate}</span>
+                          <span>{drone.position.lat}, {drone.position.lng}</span>
+                          <span className="ml-auto">{drone.status}</span>
                         </div>
 
                         {drone.status === 'emergency' && (
@@ -478,7 +530,7 @@ export default function ManagerDashboard() {
                                 {drones.filter(d => d.status === 'idle' && d.battery > 50).map(drone => (
                                   <button
                                     key={drone.id}
-                                    onClick={() => handleAssignDrone(delivery.id, drone.id)}
+                                    onClick={() => handleAssignDrone(delivery.id, drone.serialNumber)}
                                     disabled={isAssigning}
                                     className="w-full flex items-center justify-between p-2 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded text-sm disabled:opacity-50"
                                   >
@@ -511,15 +563,15 @@ export default function ManagerDashboard() {
                             Active
                           </span>
                         </div>
-                        {zone.deliveryCount !== undefined && (
+                        {zone.type !== undefined && (
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div>
                               <div className="text-gray-600">Deliveries</div>
-                              <div className="text-lg font-semibold text-gray-900">{zone.deliveryCount}</div>
+                              <div className="text-lg font-semibold text-gray-900"> 22</div> //zone.deliveryCount
                             </div>
                             <div>
                               <div className="text-gray-600">Avg Time</div>
-                              <div className="text-lg font-semibold text-gray-900">{zone.avgCompletionTime} min</div>
+                              <div className="text-lg font-semibold text-gray-900">3 min</div> //zone.avgCompletionTime
                             </div>
                           </div>
                         )}

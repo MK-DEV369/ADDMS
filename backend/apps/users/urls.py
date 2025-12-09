@@ -9,7 +9,8 @@ from .views import (
     UserRegistrationView,
     UserProfileView,
     UserListView,
-    change_password
+    change_password,
+    forgot_password
 )
 
 app_name = 'users'
@@ -21,5 +22,6 @@ urlpatterns = [
     path('profile/', UserProfileView.as_view(), name='profile'),
     path('list/', UserListView.as_view(), name='list'),
     path('change-password/', change_password, name='change-password'),
+    path('forgot-password/', forgot_password, name='forgot-password'),
 ]
 

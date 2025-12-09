@@ -1,5 +1,10 @@
 {
   "dependencies": {
+    "@types/cesium": "^1.67.14",
+    "cesium": "^1.136.0",
     "lucide-react": "^0.556.0"
+  },
+  "devDependencies": {
+    "vite-plugin-cesium": "^1.2.23"
   }
 }

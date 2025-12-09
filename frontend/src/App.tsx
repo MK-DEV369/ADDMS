@@ -4,7 +4,11 @@ import { Toaster } from '@/components/ui/toaster'
 import { useAuthStore } from '@/store/auth'
 import LoginPage from '@/pages/LoginPage'
 import DashboardLayout from '@/layouts/DashboardLayout'
-import AdminDashboard from '@/pages/admin/AdminDashboard'
+import SystemLogs from './pages/admin/SystemLogs'
+import Drones from '@/pages/admin/Drones'
+import UsersPage from '@/pages/admin/Users'
+import Zones from '@/pages/admin/Zones'
+import Analytics from '@/pages/admin/Analytics'
 import ManagerDashboard from '@/pages/manager/ManagerDashboard'
 import CustomerDashboard from '@/pages/customer/CustomerDashboard'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -27,9 +31,21 @@ function App() {
           >
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<RoleBasedDashboard />} />
-            <Route path="admin/*" element={<AdminRoutes />} />
-            <Route path="manager/*" element={<ManagerRoutes />} />
-            <Route path="customer/*" element={<CustomerRoutes />} />
+            <Route path="admin/*" element={
+              <ProtectedRoute requiredRole="admin">
+                <AdminRoutes />
+              </ProtectedRoute>
+            } />
+            <Route path="manager/*" element={
+              <ProtectedRoute requiredRole="manager">
+                <ManagerRoutes />
+              </ProtectedRoute>
+            } />
+            <Route path="customer/*" element={
+              <ProtectedRoute requiredRole="customer">
+                <CustomerRoutes />
+              </ProtectedRoute>
+            } />
           </Route>
         </Routes>
         <Toaster />
@@ -40,23 +56,27 @@ function App() {
 
 function RoleBasedDashboard() {
   const { user } = useAuthStore()
-  
+
   if (user?.role === 'admin') {
-    return <Navigate to="/admin" replace />
+    return <Navigate to="/admin/drones" replace />
   } else if (user?.role === 'manager') {
     return <Navigate to="/manager" replace />
   } else if (user?.role === 'customer') {
     return <Navigate to="/customer" replace />
   }
-  
+
   return <Navigate to="/login" replace />
 }
 
 function AdminRoutes() {
   return (
     <Routes>
-      <Route index element={<AdminDashboard />} />
-      {/* Add more admin routes */}
+      <Route index element={<Drones />} />
+      <Route path="drones" element={<Drones />} />
+      <Route path="users" element={<UsersPage />} />
+      <Route path="zones" element={<Zones />} />
+      <Route path="analytics" element={<Analytics />} />
+      <Route path="logs" element={<SystemLogs />} />
     </Routes>
   )
 }

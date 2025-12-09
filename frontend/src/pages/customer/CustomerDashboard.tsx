@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Package, MapPin, Clock, DollarSign, ChevronRight, 
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../store/auth';
+import {
+  Package, MapPin, Clock, DollarSign, ChevronRight,
   Plus, Search, Filter, Bell, Calendar, TrendingUp,
   CheckCircle, XCircle, Loader, Eye, Star, Download,
-  AlertCircle, Navigation, Zap
+  AlertCircle, Navigation, Zap, LogOut, User, ChevronDown
 } from 'lucide-react';
+import Map3D from '../../components/Map3D';
 
 // Types
 interface Order {
@@ -474,18 +477,163 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
   );
 };
 
+// Types for Map3D
+interface Drone {
+  id: number
+  serialNumber: string
+  position: { lat: number; lng: number; altitude: number }
+  heading?: number
+  pitch?: number
+  roll?: number
+  status?: 'active' | 'idle' | 'maintenance' | 'emergency' | 'offline'
+  battery?: number
+}
+
+interface Route {
+  id: number
+  path: Array<{ lat: number; lng: number; altitude: number }>
+  color?: string
+  completed?: boolean
+}
+
+interface Zone {
+  id: number
+  name: string
+  type: 'operational' | 'no-fly'
+  polygon: Array<{ lat: number; lng: number }>
+  altitudeRange?: { min: number; max: number }
+}
+
 // Main Dashboard Component
 export default function CustomerDashboard() {
+  const navigate = useNavigate();
+  const { logout } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'tracking'>('overview');
   const [orders] = useState<Order[]>(mockOrders);
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Dynamic drone tracking data
+  const [drones, setDrones] = useState<Drone[]>([]);
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [followDrone, setFollowDrone] = useState<number | null>(null);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   const activeOrders = orders.filter(o => ['pending', 'assigned', 'in_transit'].includes(o.status));
+
+  // Initialize mock drone tracking data
+  useEffect(() => {
+    // Mock zones
+    const mockZones: Zone[] = [
+      {
+        id: 1,
+        name: 'Bangalore Operational Zone',
+        type: 'operational',
+        polygon: [
+          { lat: 12.8, lng: 77.4 },
+          { lat: 12.8, lng: 77.8 },
+          { lat: 13.2, lng: 77.8 },
+          { lat: 13.2, lng: 77.4 },
+        ],
+        altitudeRange: { min: 50, max: 200 },
+      },
+      {
+        id: 2,
+        name: 'Airport No-Fly Zone',
+        type: 'no-fly',
+        polygon: [
+          { lat: 13.0, lng: 77.6 },
+          { lat: 13.0, lng: 77.7 },
+          { lat: 13.1, lng: 77.7 },
+          { lat: 13.1, lng: 77.6 },
+        ],
+        altitudeRange: { min: 0, max: 1000 },
+      },
+    ];
+
+    setZones(mockZones);
+
+    // Mock drones based on active orders
+    const mockDrones: Drone[] = activeOrders.map((order, index) => {
+      const droneId = parseInt(order.droneId!.split('-')[1]);
+      return {
+        id: droneId,
+        serialNumber: order.droneId!,
+        position: {
+          lat: 12.9716 + (Math.random() - 0.5) * 0.1, // Bangalore area
+          lng: 77.5946 + (Math.random() - 0.5) * 0.1,
+          altitude: 100 + Math.random() * 50,
+        },
+        heading: Math.random() * 360,
+        status: order.status === 'in_transit' ? 'active' : 'idle',
+        battery: 60 + Math.random() * 30,
+      };
+    });
+
+    setDrones(mockDrones);
+
+    // Mock routes for active deliveries
+    const mockRoutes: Route[] = activeOrders.map((order, index) => {
+      const droneId = parseInt(order.droneId!.split('-')[1]);
+      return {
+        id: droneId,
+        path: [
+          { lat: 12.9716, lng: 77.5946, altitude: 100 }, // Starting point
+          { lat: 12.9716 + (Math.random() - 0.5) * 0.1, lng: 77.5946 + (Math.random() - 0.5) * 0.1, altitude: 120 },
+          { lat: 12.9716 + (Math.random() - 0.5) * 0.1, lng: 77.5946 + (Math.random() - 0.5) * 0.1, altitude: 100 },
+        ],
+        color: order.status === 'in_transit' ? '#00FF00' : '#FFFF00',
+        completed: order.status === 'delivered',
+      };
+    });
+
+    setRoutes(mockRoutes);
+  }, [activeOrders]);
+
+  // Simulate real-time drone movement
+  useEffect(() => {
+    if (drones.length === 0) return;
+
+    const interval = setInterval(() => {
+      setDrones(prevDrones =>
+        prevDrones.map(drone => {
+          if (drone.status === 'active') {
+            // Simulate movement
+            const speed = 0.001; // degrees per second
+            const newHeading = (drone.heading || 0) + (Math.random() - 0.5) * 10;
+            const deltaLat = Math.sin(newHeading * Math.PI / 180) * speed;
+            const deltaLng = Math.cos(newHeading * Math.PI / 180) * speed;
+
+            return {
+              ...drone,
+              position: {
+                ...drone.position,
+                lat: drone.position.lat + deltaLat,
+                lng: drone.position.lng + deltaLng,
+                altitude: drone.position.altitude + (Math.random() - 0.5) * 2,
+              },
+              heading: newHeading,
+              battery: Math.max(10, (drone.battery || 100) - 0.01), // Slowly drain battery
+            };
+          }
+          return drone;
+        })
+      );
+    }, 2000); // Update every 2 seconds
+
+    return () => clearInterval(interval);
+  }, [drones.length]);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const filteredOrders = orders.filter(order => {
     const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -517,13 +665,7 @@ export default function CustomerDashboard() {
                   </span>
                 )}
               </button>
-              <button
-                onClick={() => setShowNewOrderModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-lg shadow-purple-600/30"
-              >
-                <Plus className="w-5 h-5" />
-                New Order
-              </button>
+
             </div>
           </div>
         </div>
@@ -808,16 +950,18 @@ export default function CustomerDashboard() {
 
             {activeTab === 'tracking' && (
               <div className="space-y-6">
-                {/* 3D Map Placeholder */}
-                <div className="bg-gray-900 rounded-xl overflow-hidden" style={{ height: '500px' }}>
-                  <div className="w-full h-full flex items-center justify-center text-white">
-                    <div className="text-center">
-                      <Navigation className="w-16 h-16 mx-auto mb-4 opacity-50 animate-pulse" />
-                      <h3 className="text-xl font-semibold mb-2">Live Tracking</h3>
-                      <p className="text-gray-400">3D CesiumJS Map Integration</p>
-                      <p className="text-sm text-gray-500 mt-2">TODO: Implement Map3D.tsx component</p>
-                    </div>
-                  </div>
+                {/* 3D Map */}
+                <div className="bg-gray-900 rounded-xl overflow-hidden" style={{ height: '600px' }}>
+                  <Map3D
+                    drones={drones}
+                    routes={routes}
+                    zones={zones}
+                    followDrone={followDrone}
+                    onDroneClick={(droneId) => setFollowDrone(droneId === followDrone ? null : droneId)}
+                    onZoneClick={(zoneId) => console.log('Zone clicked:', zoneId)}
+                    showLabels={true}
+                    showZones={true}
+                  />
                 </div>
 
                 {/* Tracking Details */}
