@@ -65,6 +65,7 @@ backend/
 │       └── urls.py
 ├── manage.py
 └── requirements.txt
+└── .env
 ```
 
 ## Frontend (React + TypeScript)
@@ -75,21 +76,32 @@ frontend/
 │   ├── pages/
 │   │   ├── LoginPage.tsx
 │   │   ├── admin/
-│   │   │   └── AdminDashboard.tsx    # Placeholder
+│   │   │   └── Analytics.tsx
+│   │   │   └── Drones.tsx
+│   │   │   └── SystemLogs.tsx
+│   │   │   └── Users.tsx
+│   │   │   └── Zones.tsx
 │   │   ├── manager/
-│   │   │   └── ManagerDashboard.tsx  # Placeholder
+│   │   │   └── Analytics.tsx
+│   │   │   └── Deliveries.tsx
+│   │   │   └── FleetMonitor.tsx
+│   │   │   └── Weather.tsx
+│   │   │   └── Zones.tsx
 │   │   └── customer/
-│   │       └── CustomerDashboard.tsx # Placeholder
+│   │       └── NewOrders.tsx
+│   │       └── MyOrders.tsx #could add more pages, but dont know yet
+│   │       └── Tracking.tsx
 │   ├── components/
-│   │   ├── Map3D.tsx                 # CesiumJS 3D map (Placeholder)
+│   │   ├── Map3D.tsx                 # CesiumJS 3D map
 │   │   ├── ProtectedRoute.tsx
-│   │   └── ui/                       # UI components (Placeholder)
+│   │   └── ui/ toaster.tsx                       # UI components
 │   ├── layouts/
 │   │   └── DashboardLayout.tsx
 │   ├── store/
 │   │   └── auth.ts                   # Zustand auth store
 │   ├── lib/
 │   │   └── api.ts                    # Axios client with auth
+│   │   └── types.ts                   # all (maybe) interface types
 │   ├── App.tsx
 │   ├── main.tsx
 │   └── index.css
@@ -97,6 +109,8 @@ frontend/
 ├── vite.config.ts
 ├── tailwind.config.js
 └── tsconfig.json
+└── .env
+└── .env.local
 ```
 
 ## Key Features
@@ -118,7 +132,7 @@ frontend/
 - ✅ Zustand for state management
 - ✅ React Query for data fetching
 - ✅ WebSocket client for real-time updates
-- ✅ Role-based dashboards (placeholders)
+- ✅ Role-based dashboards
 
 ## Database Schema
 

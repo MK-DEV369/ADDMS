@@ -17,7 +17,6 @@ class Drone(models.Model):
         IDLE = 'idle', _('Idle')
         CHARGING = 'charging', _('Charging')
         ASSIGNED = 'assigned', _('Assigned to Delivery')
-        IN_FLIGHT = 'in_flight', _('In Flight')
         DELIVERING = 'delivering', _('Delivering')
         RETURNING = 'returning', _('Returning to Base')
         MAINTENANCE = 'maintenance', _('Under Maintenance')

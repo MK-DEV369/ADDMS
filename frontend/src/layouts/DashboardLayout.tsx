@@ -54,14 +54,15 @@ export default function DashboardLayout() {
         { name: 'Deliveries', path: '/manager/deliveries', icon: Package },
         { name: 'Zones', path: '/manager/zones', icon: MapPin },
         { name: 'Weather', path: '/manager/weather', icon: Cloud },
+        { name: 'Analytics', path: '/manager/analytics', icon: BarChart3 },
       ]
     }
 
     if (role === 'customer') {
       return [
-        { name: 'Dashboard', path: '/customer', icon: LayoutDashboard },
-        { name: 'New Order', path: '/customer/order/new', icon: Package },
-        { name: 'My Orders', path: '/customer/orders', icon: Truck },
+        { name: 'Overview', path: '/customer/overview', icon: LayoutDashboard },
+        { name: 'Orders', path: '/customer/orders', icon: Package },
+        { name: 'Tracking', path: '/customer/tracking', icon: MapPin },
       ]
     }
 

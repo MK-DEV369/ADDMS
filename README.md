@@ -90,7 +90,7 @@ celery -A addms beat -l info
 - `users` - Authentication & RBAC
 - `drones` - Drone fleet management
 - `deliveries` - Delivery order lifecycle
-- `zones` - Operational & no-fly zones
+- `zones` - Operational & no-fly zones: https://digitalsky.dgca.gov.in/airspace-map/#/app
 - `routes` - Route optimization & ETA prediction
 - `telemetry` - Real-time drone data
 - `analytics` - Fleet metrics & KPIs

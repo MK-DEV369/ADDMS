@@ -4,14 +4,24 @@ import { Toaster } from '@/components/ui/toaster'
 import { useAuthStore } from '@/store/auth'
 import LoginPage from '@/pages/LoginPage'
 import DashboardLayout from '@/layouts/DashboardLayout'
+import ProtectedRoute from '@/components/ProtectedRoute'
+
 import SystemLogs from './pages/admin/SystemLogs'
 import Drones from '@/pages/admin/Drones'
 import UsersPage from '@/pages/admin/Users'
 import Zones from '@/pages/admin/Zones'
 import Analytics from '@/pages/admin/Analytics'
-import ManagerDashboard from '@/pages/manager/ManagerDashboard'
-import CustomerDashboard from '@/pages/customer/CustomerDashboard'
-import ProtectedRoute from '@/components/ProtectedRoute'
+
+import FleetMonitor from '@/pages/manager/FleetMonitor'
+import Deliveries from '@/pages/manager/Deliveries'
+import ManagerZones from '@/pages/manager/Zones'
+import Weather from '@/pages/manager/Weather'
+import ManagerAnalytics from '@/pages/manager/Analytics'
+
+import Overview from '@/pages/customer/Overview'
+import Orders from '@/pages/customer/Orders'
+import Tracking from '@/pages/customer/Tracking'
+
 
 const queryClient = new QueryClient()
 
@@ -60,7 +70,7 @@ function RoleBasedDashboard() {
   if (user?.role === 'admin') {
     return <Navigate to="/admin/drones" replace />
   } else if (user?.role === 'manager') {
-    return <Navigate to="/manager" replace />
+    return <Navigate to="/manager/fleet" replace />
   } else if (user?.role === 'customer') {
     return <Navigate to="/customer" replace />
   }
@@ -84,8 +94,12 @@ function AdminRoutes() {
 function ManagerRoutes() {
   return (
     <Routes>
-      <Route index element={<ManagerDashboard />} />
-      {/* Add more manager routes */}
+      <Route index element={<FleetMonitor />} />
+      <Route path="fleet" element={<FleetMonitor />} />
+      <Route path="deliveries" element={<Deliveries />} />
+      <Route path="zones" element={<ManagerZones />} />
+      <Route path="weather" element={<Weather />} />
+      <Route path="analytics" element={<ManagerAnalytics />} />
     </Routes>
   )
 }
@@ -93,8 +107,10 @@ function ManagerRoutes() {
 function CustomerRoutes() {
   return (
     <Routes>
-      <Route index element={<CustomerDashboard />} />
-      {/* Add more customer routes */}
+      <Route index element={<Navigate to="/customer/overview" replace />} />
+      <Route path="overview" element={<Overview />} />
+      <Route path="orders" element={<Orders />} />
+      <Route path="tracking" element={<Tracking />} />
     </Routes>
   )
 }

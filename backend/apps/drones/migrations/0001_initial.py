@@ -63,7 +63,6 @@ class Migration(migrations.Migration):
                             ("idle", "Idle"),
                             ("charging", "Charging"),
                             ("assigned", "Assigned to Delivery"),
-                            ("in_flight", "In Flight"),
                             ("delivering", "Delivering"),
                             ("returning", "Returning to Base"),
                             ("maintenance", "Under Maintenance"),

@@ -21,7 +21,7 @@ const Drones = () => {
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [selectedItem, setSelectedItem] = useState<Drone | null>(null);
-  const [newDrone, setNewDrone] = useState({
+  const [newDrone, setNewDrone] = useState<Partial<Drone>>({
     serial_number: '',
     model: '',
     manufacturer: '',
@@ -37,52 +37,36 @@ const Drones = () => {
   }, []);
 
   const fetchDrones = async () => {
-  try {
-    const response = await getDrones();
-    console.log('Response:', response);
-    const droneData = response.data.drones;
-    console.log('Setting drones state:', droneData);
-    // If droneData is a URL, fetch from it
-    if (typeof droneData === 'string') {
-      const dronesResponse = await api.get(droneData);
-      setDrones(dronesResponse.data);
-    } else {
-      setDrones(droneData);
+    try {
+      const response = await getDrones();
+      console.log('Response:', response);
+      setDrones(response.data);
+    } catch (error) {
+      console.error('Failed to fetch drones', error);
     }
-
-  } catch (error) {
-    console.error('Failed to fetch drones', error);
-  }
   };
 
   const handleAddDrone = async () => {
     try {
-      await addDrone(newDrone);
-      const response = await getDrones();
-      const droneData = response.data.drones;
-      console.log('Handle Add Drone Data:', droneData);
-      // If droneData is a URL, fetch from it
-      if (typeof droneData === 'string') {
-        const dronesResponse = await api.get(droneData);
-        setDrones(dronesResponse.data);
-      } else {
-        setDrones(droneData);
-      }
+      await addDrone(newDrone as Drone);
+      await fetchDrones();
       closeModal();
     } catch (error) {
       console.error('Failed to add drone', error);
     }
   };
 
-  const getStatusColor = (status: 'active' | 'idle' | 'maintenance' | 'inactive' | 'error') => {
-    const colors = {
-      active: 'bg-green-100 text-green-800',
+  const getStatusColor = (status?: string) => {
+    const colors: Record<string, string> = {
       idle: 'bg-blue-100 text-blue-800',
-      maintenance: 'bg-yellow-100 text-yellow-800',
-      inactive: 'bg-gray-100 text-gray-800',
-      error: 'bg-red-100 text-red-800',
+      charging: 'bg-yellow-100 text-yellow-800',
+      assigned: 'bg-purple-100 text-purple-800',
+      delivering: 'bg-orange-100 text-orange-800',
+      returning: 'bg-indigo-100 text-indigo-800',
+      maintenance: 'bg-red-100 text-red-800',
+      offline: 'bg-gray-100 text-gray-800',
     };
-    return colors[status] || colors.idle;
+    return colors[status || 'idle'] || colors.idle;
   };
 
   const getBatteryColor = (level: number) => {
@@ -129,7 +113,7 @@ const filteredDrones = Array.isArray(drones)
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Active Now</p>
-              <p className="text-3xl font-bold text-green-600 mt-2">{filteredDrones.filter(d => d.status === 'active').length}</p>
+              <p className="text-3xl font-bold text-green-600 mt-2">{filteredDrones.filter(d => ['assigned', 'delivering', 'returning'].includes(d.status || '')).length}</p>
             </div>
             <Activity className="w-10 h-10 text-green-500" />
           </div>

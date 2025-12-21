@@ -1,22 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { MapPin, Navigation, Maximize2, Eye, EyeOff, Settings } from 'lucide-react'
 import * as Cesium from 'cesium'
+import { Drone } from '@/lib/types'
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN
 
 interface Entity {
   id: string;
   // Add other properties that an entity might have
-}
-
-interface Drone {
-  id: number
-  serialNumber: string
-  position: { lat: number; lng: number; altitude: number }
-  heading?: number
-  pitch?: number
-  roll?: number
-  status?: 'active' | 'idle' | 'maintenance' | 'emergency' | 'offline'
-  battery?: number
 }
 
 interface Route {
@@ -196,6 +186,8 @@ export default function Map3D({
       const entityId = `drone-${drone.id}`
       let entity = entitiesRef.current.get(entityId)
 
+      if (!drone.position) return; // Skip if no position data
+
       const position = Cesium.Cartesian3.fromDegrees(
         drone.position.lng,
         drone.position.lat,
@@ -222,7 +214,7 @@ export default function Map3D({
         // Create new entity
         entity = viewer.entities.add({
           id: entityId,
-          name: drone.serialNumber,
+          name: drone.serial_number,
           position: position,
 
           // 3D Model (use actual drone GLTF model)
@@ -244,7 +236,7 @@ export default function Map3D({
 
           // Label
           label: showLabels ? {
-            text: `${drone.serialNumber}\n${drone.battery}%`,
+            text: `${drone.serial_number}\n${drone.battery || drone.battery_level}%`,
             font: '12px sans-serif',
             fillColor: Cesium.Color.WHITE,
             outlineColor: Cesium.Color.BLACK,
@@ -258,11 +250,11 @@ export default function Map3D({
           // Description for info box
           description: `
             <div>
-              <p><strong>Serial:</strong> ${drone.serialNumber}</p>
+              <p><strong>Serial:</strong> ${drone.serial_number}</p>
               <p><strong>Status:</strong> ${drone.status}</p>
-              <p><strong>Battery:</strong> ${drone.battery}%</p>
-              <p><strong>Position:</strong> ${drone.position.lat.toFixed(6)}, ${drone.position.lng.toFixed(6)}</p>
-              <p><strong>Altitude:</strong> ${drone.position.altitude.toFixed(1)}m</p>
+              <p><strong>Battery:</strong> ${drone.battery || drone.battery_level}%</p>
+              <p><strong>Position:</strong> ${drone.position!.lat.toFixed(6)}, ${drone.position!.lng.toFixed(6)}</p>
+              <p><strong>Altitude:</strong> ${drone.position!.altitude.toFixed(1)}m</p>
             </div>
           `
         })
@@ -520,7 +512,7 @@ export default function Map3D({
           <div className="flex items-center gap-2">
             <Navigation className="h-4 w-4 animate-pulse" />
             <span className="font-semibold">
-              Following {drones.find(d => d.id === selectedDrone)?.serialNumber}
+              Following {drones.find(d => d.id === selectedDrone)?.serial_number}
             </span>
           </div>
         </div>
@@ -529,7 +521,7 @@ export default function Map3D({
       {/* Stats Overlay */}
       <div className="absolute top-4 left-4 bg-gray-900 bg-opacity-80 text-white p-3 rounded space-y-1 text-sm">
         <div className="font-semibold mb-2">Map Stats</div>
-        <div>Active Drones: <span className="text-green-400">{drones.filter(d => d.status === 'active').length}</span></div>
+        <div>Active Drones: <span className="text-green-400">{drones.filter(d => d.status === 'delivering').length}</span></div>
         <div>Routes: <span className="text-cyan-400">{routes.length}</span></div>
         <div>Zones: <span className="text-yellow-400">{zones.length}</span></div>
         <div>Buildings: <span className={showBuildings ? 'text-green-400' : 'text-gray-400'}>{showBuildings ? 'Shown' : 'Hidden'}</span></div>

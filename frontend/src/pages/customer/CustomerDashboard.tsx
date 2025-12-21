@@ -8,6 +8,7 @@ import {
   AlertCircle, Navigation, Zap, LogOut, User, ChevronDown
 } from 'lucide-react';
 import Map3D from '../../components/Map3D';
+import { Drone } from '@/lib/types';
 
 // Types
 interface Order {
@@ -477,18 +478,6 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
   );
 };
 
-// Types for Map3D
-interface Drone {
-  id: number
-  serialNumber: string
-  position: { lat: number; lng: number; altitude: number }
-  heading?: number
-  pitch?: number
-  roll?: number
-  status?: 'active' | 'idle' | 'maintenance' | 'emergency' | 'offline'
-  battery?: number
-}
-
 interface Route {
   id: number
   path: Array<{ lat: number; lng: number; altitude: number }>
@@ -567,15 +556,26 @@ export default function CustomerDashboard() {
       const droneId = parseInt(order.droneId!.split('-')[1]);
       return {
         id: droneId,
-        serialNumber: order.droneId!,
+        serial_number: order.droneId!,
+        model: 'DJI Matrice 300 RTK',
+        manufacturer: 'DJI',
+        max_payload_weight: 2.7,
+        max_speed: 23,
+        max_altitude: 7000,
+        max_range: 15000,
+        battery_capacity: 5935,
         position: {
           lat: 12.9716 + (Math.random() - 0.5) * 0.1, // Bangalore area
           lng: 77.5946 + (Math.random() - 0.5) * 0.1,
           altitude: 100 + Math.random() * 50,
         },
         heading: Math.random() * 360,
-        status: order.status === 'in_transit' ? 'active' : 'idle',
-        battery: 60 + Math.random() * 30,
+        status: order.status === 'in_transit' ? 'delivering' : 'idle',
+        battery_level: 60 + Math.random() * 30,
+        last_heartbeat: new Date().toISOString(),
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
     });
 
@@ -606,7 +606,7 @@ export default function CustomerDashboard() {
     const interval = setInterval(() => {
       setDrones(prevDrones =>
         prevDrones.map(drone => {
-          if (drone.status === 'active') {
+          if (drone.status === 'delivering') {
             // Simulate movement
             const speed = 0.001; // degrees per second
             const newHeading = (drone.heading || 0) + (Math.random() - 0.5) * 10;
@@ -622,7 +622,7 @@ export default function CustomerDashboard() {
                 altitude: drone.position.altitude + (Math.random() - 0.5) * 2,
               },
               heading: newHeading,
-              battery: Math.max(10, (drone.battery || 100) - 0.01), // Slowly drain battery
+              battery_level: Math.max(10, (drone.battery_level || 100) - 0.01), // Slowly drain battery
             };
           }
           return drone;
