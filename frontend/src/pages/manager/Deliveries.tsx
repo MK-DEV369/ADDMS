@@ -6,98 +6,34 @@ import {
   CheckCircle,
   AlertTriangle,
   Truck,
-  Eye,
-  Plus
+  Eye
 } from 'lucide-react'
 import { Order } from '@/lib/types'
+import api, { getOrders, updateOrder as apiUpdateOrder } from '@/lib/api'
 
 export default function Deliveries() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [updatingId, setUpdatingId] = useState<number | null>(null)
 
-  // Mock data - replace with real API call
+  // Fetch orders from API
   useEffect(() => {
-    const mockOrders: Order[] = [
-      {
-        id: 1,
-        customerId: 1,
-        pickupLocation: {
-          lat: 12.9716,
-          lng: 77.5946,
-          address: '123 Main St, Bangalore'
-        },
-        deliveryLocation: {
-          lat: 12.9816,
-          lng: 77.6046,
-          address: '456 Oak Ave, Bangalore'
-        },
-        packageDetails: {
-          weight: 2.5,
-          description: 'Electronics package',
-          value: 150.00
-        },
-        priority: 'high',
-        status: 'in_transit',
-        assignedDroneId: 1,
-        estimatedDeliveryTime: new Date(Date.now() + 1800000).toISOString(), // 30 min from now
-        trackingNumber: 'DEL001',
-        createdAt: new Date(Date.now() - 3600000).toISOString() // 1 hour ago
-      },
-      {
-        id: 2,
-        customerId: 2,
-        pickupLocation: {
-          lat: 12.9616,
-          lng: 77.5846,
-          address: '789 Pine St, Bangalore'
-        },
-        deliveryLocation: {
-          lat: 12.9916,
-          lng: 77.6146,
-          address: '321 Elm St, Bangalore'
-        },
-        packageDetails: {
-          weight: 1.2,
-          description: 'Documents',
-          value: 50.00
-        },
-        priority: 'medium',
-        status: 'pending',
-        estimatedDeliveryTime: new Date(Date.now() + 7200000).toISOString(), // 2 hours from now
-        trackingNumber: 'DEL002',
-        createdAt: new Date(Date.now() - 1800000).toISOString() // 30 min ago
-      },
-      {
-        id: 3,
-        customerId: 3,
-        pickupLocation: {
-          lat: 12.9516,
-          lng: 77.5746,
-          address: '555 Cedar St, Bangalore'
-        },
-        deliveryLocation: {
-          lat: 12.9416,
-          lng: 77.5646,
-          address: '777 Maple Ave, Bangalore'
-        },
-        packageDetails: {
-          weight: 0.8,
-          description: 'Medicine',
-          value: 75.00
-        },
-        priority: 'urgent',
-        status: 'delivered',
-        assignedDroneId: 2,
-        actualDeliveryTime: new Date(Date.now() - 900000).toISOString(), // 15 min ago
-        trackingNumber: 'DEL003',
-        createdAt: new Date(Date.now() - 7200000).toISOString() // 2 hours ago
+    const fetchOrders = async () => {
+      try {
+        setLoading(true)
+        const res = await getOrders()
+        const data = res.data.results || res.data
+        setOrders(Array.isArray(data) ? data : [])
+        console.debug('Fetched orders:', data)
+      } catch (err: any) {
+        console.error('Failed to fetch orders', err)
+        alert('Failed to load deliveries. Please try again.')
+      } finally {
+        setLoading(false)
       }
-    ]
+    }
 
-    setTimeout(() => {
-      setOrders(mockOrders)
-      setLoading(false)
-    }, 1000)
+    fetchOrders()
   }, [])
 
   const getStatusColor = (status: string) => {
@@ -135,8 +71,33 @@ export default function Deliveries() {
   }
 
   const pendingOrders = orders.filter(o => o.status === 'pending').length
-  const inTransitOrders = orders.filter(o => o.status === 'in_transit').length
+  const inTransitOrders = orders.filter(o => o.status === 'in_transit' || o.status === 'assigned' || o.status === 'delivering').length
   const deliveredOrders = orders.filter(o => o.status === 'delivered').length
+
+  const handleAdvanceStatus = async (order: Order) => {
+    const statuses = ['pending', 'assigned', 'in_transit', 'delivering', 'delivered']
+    const currentIdx = statuses.indexOf(order.status)
+    if (currentIdx === -1 || currentIdx >= statuses.length - 1) {
+      alert('Order is already at final status')
+      return
+    }
+
+    const nextStatus = statuses[currentIdx + 1]
+    setUpdatingId(order.id as number)
+
+    try {
+      console.debug(`Advancing order ${order.id} from ${order.status} to ${nextStatus}`)
+      const res = await apiUpdateOrder(order.id as number, { status: nextStatus })
+      const updated = res.data
+      setOrders(prev => prev.map(o => (o.id === updated.id ? updated : o)))
+      alert(`Order advanced to ${nextStatus.replace('_', ' ')}`)
+    } catch (err: any) {
+      console.error('Failed to update order status', err)
+      alert(`Failed to update order: ${err?.response?.data?.detail || err.message}`)
+    } finally {
+      setUpdatingId(null)
+    }
+  }
 
   if (loading) {
     return (
@@ -150,10 +111,7 @@ export default function Deliveries() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center">
-        <button className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-          <Plus className="w-4 h-4" />
-          <span>New Delivery</span>
-        </button>
+        <p className="text-gray-600 text-sm">Manage pending orders and advance their status</p>
       </div>
 
       {/* Stats Cards */}
@@ -201,35 +159,38 @@ export default function Deliveries() {
           <div className="space-y-4">
             {orders.map((order) => (
               <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-4 flex-1">
                   <div className={`w-3 h-3 rounded-full ${getStatusColor(order.status)}`} />
                   <div>
-                    <h3 className="font-medium">Order #{order.trackingNumber}</h3>
+                    <h3 className="font-medium">Order #{order.id}</h3>
                     <p className="text-sm text-gray-600">
-                      {order.pickupLocation.address} → {order.deliveryLocation.address}
+                      {order.pickup_address || 'Pickup TBD'} → {order.delivery_address}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-6">
-                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityColor(order.priority)}`}>
-                    {order.priority}
+                <div className="flex items-center space-x-4">
+                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800 capitalize`}>
+                    {order.status.replace('_', ' ')}
                   </span>
 
-                  <div className="flex items-center space-x-2">
-                    {getStatusIcon(order.status)}
-                    <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800 capitalize">
-                      {order.status.replace('_', ' ')}
-                    </span>
-                  </div>
-
                   <div className="text-sm text-gray-600">
-                    {order.packageDetails.weight}kg • ${order.packageDetails.value}
+                    {order.package?.weight}kg
                   </div>
 
-                  <button className="flex items-center space-x-2 px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
-                    <Eye className="w-4 h-4" />
-                    <span>View</span>
+                  <button
+                    onClick={() => handleAdvanceStatus(order)}
+                    disabled={updatingId === order.id || order.status === 'delivered'}
+                    className="flex items-center space-x-2 px-3 py-1.5 border border-blue-300 rounded-lg text-blue-700 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {updatingId === order.id ? (
+                      <span>Updating...</span>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Next Status</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

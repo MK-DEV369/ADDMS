@@ -7,115 +7,60 @@ import {
   CheckCircle,
   Clock,
   TrendingUp,
-  Activity
+  Activity,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react'
 import { Drone } from '@/lib/types'
+import { getDrones } from '@/lib/api'
 
 export default function FleetMonitor() {
   const [drones, setDrones] = useState<Drone[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
-  // Mock data - replace with real API call
-  const mockDrones: Drone[] = [
-    {
-      id: 1,
-      serial_number: 'DRONE-001',
-      model: 'Quadcopter X1',
-      manufacturer: 'DroneTech',
-      max_payload_weight: 5,
-      max_speed: 50,
-      max_altitude: 120,
-      max_range: 10,
-      battery_capacity: 5000,
-      status: 'delivering',
-      battery_level: 85,
-      current_position_lat: 12.9716,
-      current_position_lng: 77.5946,
-      current_altitude: 50,
-      position: { lat: 12.9716, lng: 77.5946, altitude: 50 },
-      heading: 90,
-      pitch: 0,
-      roll: 0,
-      battery: 85,
-      last_heartbeat: '2024-01-15T10:30:00Z',
-      is_active: true
-    },
-    {
-      id: 2,
-      serial_number: 'DRONE-002',
-      model: 'Quadcopter X1',
-      manufacturer: 'DroneTech',
-      max_payload_weight: 5,
-      max_speed: 50,
-      max_altitude: 120,
-      max_range: 10,
-      battery_capacity: 5000,
-      status: 'idle',
-      battery_level: 95,
-      current_position_lat: 12.9816,
-      current_position_lng: 77.6046,
-      current_altitude: 0,
-      position: { lat: 12.9816, lng: 77.6046, altitude: 0 },
-      heading: 0,
-      pitch: 0,
-      roll: 0,
-      battery: 95,
-      last_heartbeat: '2024-01-15T10:25:00Z',
-      is_active: true
-    },
-    {
-      id: 3,
-      serial_number: 'DRONE-003',
-      model: 'Quadcopter X2',
-      manufacturer: 'DroneTech',
-      max_payload_weight: 8,
-      max_speed: 60,
-      max_altitude: 150,
-      max_range: 15,
-      battery_capacity: 6000,
-      status: 'maintenance',
-      battery_level: 15,
-      current_position_lat: 12.9516,
-      current_position_lng: 77.5746,
-      current_altitude: 0,
-      position: { lat: 12.9516, lng: 77.5746, altitude: 0 },
-      heading: 0,
-      pitch: 0,
-      roll: 0,
-      battery: 15,
-      last_heartbeat: '2024-01-15T09:45:00Z',
-      is_active: false
-    },
-    {
-      id: 4,
-      serial_number: 'DRONE-004',
-      model: 'Quadcopter X1',
-      manufacturer: 'DroneTech',
-      max_payload_weight: 5,
-      max_speed: 50,
-      max_altitude: 120,
-      max_range: 10,
-      battery_capacity: 5000,
-      status: 'charging',
-      battery_level: 25,
-      current_position_lat: 12.9616,
-      current_position_lng: 77.5846,
-      current_altitude: 0,
-      position: { lat: 12.9616, lng: 77.5846, altitude: 0 },
-      heading: 0,
-      pitch: 0,
-      roll: 0,
-      battery: 25,
-      last_heartbeat: '2024-01-15T10:20:00Z',
-      is_active: true
+  // Fetch drones from API
+  const fetchDrones = async () => {
+    try {
+      setError(null)
+      const res = await getDrones()
+      const data = res.data.results || res.data
+      
+      // Normalize PostGIS Point field if present
+      const normalizedDrones = (Array.isArray(data) ? data : []).map((drone: any) => {
+        if (drone.current_position && drone.current_position.coordinates) {
+          const [lng, lat] = drone.current_position.coordinates
+          return {
+            ...drone,
+            current_position_lng: lng,
+            current_position_lat: lat,
+            position: { lat, lng, altitude: drone.current_altitude || 0 }
+          }
+        }
+        return drone
+      })
+      
+      setDrones(normalizedDrones)
+      console.debug('Fetched drones:', normalizedDrones)
+    } catch (err: any) {
+      console.error('Failed to fetch drones', err)
+      setError(err?.response?.data?.detail || 'Failed to load drone data')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-  ]
+  }
 
   useEffect(() => {
-    setTimeout(() => {
-      setDrones(mockDrones)
-      setLoading(false)
-    }, 1000)
+    fetchDrones()
+    
+    // Auto-refresh every 10 seconds
+    const interval = setInterval(() => {
+      fetchDrones()
+    }, 10000)
+    
+    return () => clearInterval(interval)
   }, [])
 
   const getStatusColor = (status?: string) => {
@@ -151,13 +96,42 @@ export default function FleetMonitor() {
     )
   }
 
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-gray-700 mb-4">{error}</p>
+          <button
+            onClick={() => {
+              setLoading(true)
+              setError(null)
+              fetchDrones()
+            }}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <button className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-          <TrendingUp className="w-4 h-4" />
-          <span>View Analytics</span>
+        <h2 className="text-2xl font-bold text-gray-900">Fleet Monitor {drones.length} Drones</h2>
+        <button
+          onClick={() => {
+            setRefreshing(true)
+            fetchDrones()
+          }}
+          disabled={refreshing}
+          className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
         </button>
       </div>
 

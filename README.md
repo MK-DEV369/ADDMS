@@ -71,11 +71,10 @@ redis-server
 
 # Terminal 2: Celery Worker
 cd backend
-celery -A addms worker -l info
-
+celery -A addms worker --loglevel=info --pool=solo
 # Terminal 3: Celery Beat (for periodic tasks)
 cd backend
-celery -A addms beat -l info
+celery -A addms beat --loglevel=info
 ```
 
 ## 👥 User Roles

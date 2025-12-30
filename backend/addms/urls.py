@@ -12,10 +12,10 @@ from drf_yasg import openapi
 schema_view = get_schema_view(
     openapi.Info(
         title="ADDMS API",
-        default_version='v1',
+        default_version='v3',
         description="Autonomous Drone Delivery Management System API",
-        terms_of_service="https://www.example.com/terms/",
-        contact=openapi.Contact(email="contact@addms.local"),
+        terms_of_service="https://www.Moryakantha.com/terms/",
+        contact=openapi.Contact(email="lmkantha@gmail.com"),
         license=openapi.License(name="MIT License"),
     ),
     public=True,
@@ -24,12 +24,8 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
-    # API Documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
-    
-    # API Routes
     path('api/auth/', include('apps.users.urls')),
     path('api/drones/', include('apps.drones.urls')),
     path('api/deliveries/', include('apps.deliveries.urls')),

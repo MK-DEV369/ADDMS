@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
 import api from '@/lib/api'
-import { Eye, EyeOff, Loader2, Plane, X } from 'lucide-react'
+import { Eye, EyeOff, Loader2, X } from 'lucide-react'
+import ADDMS from '../store/ADDMS.png';
+import LiquidEther from '@/components/ui/LiquidEther'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
@@ -11,14 +13,10 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  // Forgot password modal state
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [forgotUsername, setForgotUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-
-  // Registration modal state
   const [showRegister, setShowRegister] = useState(false)
   const [registerData, setRegisterData] = useState({
     username: '',
@@ -28,6 +26,8 @@ export default function LoginPage() {
     role: 'customer' as 'admin' | 'manager' | 'customer',
     firstName: '',
     lastName: '',
+    phoneNumber: '',
+    address: '',
   })
 
   const { setAuth } = useAuthStore()
@@ -116,10 +116,15 @@ export default function LoginPage() {
       setError('Passwords do not match')
       return
     }
+    if (registerData.password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
     setError('')
     setLoading(true)
 
     try {
+      console.debug('[LoginPage] register payload', registerData)
       await api.post('/auth/register/', {
         username: registerData.username,
         email: registerData.email,
@@ -128,6 +133,8 @@ export default function LoginPage() {
         role: registerData.role,
         first_name: registerData.firstName,
         last_name: registerData.lastName,
+        phone_number: registerData.phoneNumber,
+        address: registerData.address,
       })
       setError('Registration successful! Please login.')
       setShowRegister(false)
@@ -139,6 +146,8 @@ export default function LoginPage() {
         role: 'customer',
         firstName: '',
         lastName: '',
+        phoneNumber: '',
+        address: '',
       })
     } catch (err: any) {
       const errorMsg = err.response?.data?.username?.[0] ||
@@ -155,21 +164,34 @@ export default function LoginPage() {
   
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 px-4 py-12">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-        <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse delay-1000"></div>
-        <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse delay-2000"></div>
-      </div>
+            <div className="absolute inset-0 z-0 pointer-events-none">
+                <LiquidEther
+                    colors={['#5227FF', '#FF9FFC', '#B19EEF']}
+                    mouseForce={20}
+                    cursorSize={60}
+                    isViscous={false}
+                    viscous={20}
+                    iterationsViscous={16}
+                    iterationsPoisson={16}
+                    resolution={0.35}
+                    isBounce={true}
+                    autoDemo={!((typeof window !== 'undefined') && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)}
+                    autoSpeed={0.25}
+                    autoIntensity={0.9}
+                    takeoverDuration={0.35}
+                    autoResumeDelay={10000}
+                    autoRampDuration={0.4}
+                />
+            </div>
 
       <div className="max-w-md w-full space-y-8 relative">
         {/* Card */}
         <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/20">
           {/* Logo & Header */}
           <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mb-4 shadow-lg transform hover:scale-105 transition-transform">
-              <Plane className="w-8 h-8 text-white" />
-            </div>
+                        <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-[#e2feff] to-[#e2feff] rounded-3xl mb-8 shadow-2xl transform hover:rotate-6 transition-transform">
+                            <img src={ADDMS} alt="ADDMS Logo" className="w-12 h-12 rounded-lg" />
+                        </div>
             <h2 className="text-3xl font-bold text-gray-900 mb-2">
               Welcome to ADDMS
             </h2>
@@ -317,14 +339,14 @@ export default function LoginPage() {
         </div>
 
         {/* Debug Info */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-lg p-4 border border-gray-200">
+        {/* <div className="bg-white/60 backdrop-blur-sm rounded-lg p-4 border border-gray-200">
           <p className="text-xs text-gray-600 text-center font-mono">
             <span className="font-semibold">Debug Credentials:</span><br />
             Admin (Superuser): <code className="bg-gray-100 px-1 py-0.5 rounded">admin / vijay159</code><br />
             Manager: <code className="bg-gray-100 px-1 py-0.5 rounded">manager1 / moryakantha</code><br />
             Customer: <code className="bg-gray-100 px-1 py-0.5 rounded">customer1 / mahantesh</code>
           </p>
-        </div>
+        </div> */}
       </div>
 
       {/* Forgot Password Modal */}
@@ -465,6 +487,27 @@ export default function LoginPage() {
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  className="block w-full px-4 py-3 border border-gray-300 rounded-lg"
+                  value={registerData.phoneNumber}
+                  onChange={(e) => setRegisterData({...registerData, phoneNumber: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Address
+                </label>
+                <textarea
+                  className="block w-full px-4 py-3 border border-gray-300 rounded-lg"
+                  value={registerData.address}
+                  onChange={(e) => setRegisterData({...registerData, address: e.target.value})}
+                />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">

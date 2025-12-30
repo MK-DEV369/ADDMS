@@ -31,19 +31,20 @@ def assign_drone_to_delivery(self, order_id, drone_id):
         
         # Update order
         order.drone = drone
-        order.status = DeliveryOrder.Status.ASSIGNED
+        order.status = DeliveryOrder.Status.IN_TRANSIT
         order.assigned_at = timezone.now()
-        order.save()
-        
+        order.picked_up_at = order.picked_up_at or timezone.now()
+        order.save(update_fields=['drone', 'status', 'assigned_at', 'picked_up_at'])
+
         # Update drone status
-        drone.status = Drone.Status.ASSIGNED
-        drone.save()
-        
+        drone.status = Drone.Status.DELIVERING
+        drone.save(update_fields=['status'])
+
         # Create status history
         OrderStatusHistory.objects.create(
             order=order,
-            status=DeliveryOrder.Status.ASSIGNED,
-            notes=f"Assigned to drone {drone.serial_number}"
+            status=DeliveryOrder.Status.IN_TRANSIT,
+            notes=f"Drone {drone.serial_number} dispatched"
         )
         
         # Trigger route optimization
@@ -53,8 +54,8 @@ def assign_drone_to_delivery(self, order_id, drone_id):
         notify_customer_event.delay(
             user_id=order.customer.id,
             event_type='delivery_assigned',
-            title='Drone Assigned',
-            message=f'Drone {drone.serial_number} has been assigned to your delivery.',
+            title='Drone Dispatched',
+            message=f'Drone {drone.serial_number} is en route with your delivery.',
             related_object_id=order.id,
             related_object_type='delivery_order'
         )

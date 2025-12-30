@@ -5,20 +5,17 @@ import {
   Menu,
   X,
   LayoutDashboard,
-  Settings,
   Users,
   Plane,
   Package,
   MapPin,
   BarChart3,
   FileText,
-  Bell,
-  User,
   LogOut,
   ChevronDown,
-  Truck,
   Cloud,
 } from 'lucide-react'
+import ADDMS from '../store/ADDMS.png';
 
 export default function DashboardLayout() {
   const { user, logout } = useAuthStore()
@@ -31,7 +28,7 @@ export default function DashboardLayout() {
   const handleLogout = () => {
     logout()
     setIsUserMenuOpen(false)
-    navigate('/login')
+    navigate('/home')
   }
 
   // Define navigation items based on user role
@@ -91,8 +88,8 @@ export default function DashboardLayout() {
         <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
           {isSidebarOpen && (
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <Plane className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 bg-gradient-to-br from-[#e2feff] to-[#e2feff] rounded-lg flex items-center justify-center">
+                <img src={ADDMS} alt="ADDMS Logo" className="w-5 h-5 rounded-lg" />
               </div>
               <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                 ADDMS

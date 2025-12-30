@@ -22,6 +22,24 @@ const mockData = {
   maintenanceCount: 1
 };
 
+// Mock Bengaluru-specific datasets (these are intentionally mock values)
+const mockBengaluru = {
+  // deliveries per zone in Bengaluru (mock)
+  deliveriesByZone: [
+    { zone: 'Whitefield', count: 34 },
+    { zone: 'Koramangala', count: 48 },
+    { zone: 'Indiranagar', count: 27 },
+    { zone: 'MG Road', count: 19 },
+    { zone: 'Yelahanka', count: 12 }
+  ],
+  // last 30 days deliveries (mock daily counts)
+  last30Days: Array.from({ length: 30 }).map((_, i) => 50 + Math.round(20 * Math.sin(i / 3) + Math.random() * 10))
+}
+
+// Debug: indicate mock data usage
+console.debug('[Analytics] Using mockData for KPIs', mockData)
+console.debug('[Analytics] Using mock Bengaluru datasets (mockBengaluru)', mockBengaluru)
+
 const Analytics = () => {
   const kpis = useMemo(() => ({
     activeDeliveries: mockData.activeDeliveries,
@@ -95,10 +113,19 @@ const Analytics = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Deliveries Chart */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Deliveries Overview</h3>
-          <div className="h-64 flex items-center justify-center border-2 border-dashed border-gray-300 rounded">
-            <p className="text-gray-500">Line Chart: Deliveries over last 30 days</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Deliveries Overview (Bengaluru — mock)</h3>
+          <div className="h-64 flex items-center justify-center border-2 border-dashed border-gray-300 rounded p-4">
+            {/* Simple sparkline (mock data) */}
+            <svg className="w-full h-40" viewBox="0 0 300 80" preserveAspectRatio="none">
+              <polyline
+                fill="none"
+                stroke="#4F46E5"
+                strokeWidth={2}
+                points={mockBengaluru.last30Days.map((v, i) => `${(i/29)*300},${80 - (v/Math.max(...mockBengaluru.last30Days))*70}`).join(' ')}
+              />
+            </svg>
           </div>
+          <p className="text-xs text-gray-500 mt-2">This chart uses mock daily delivery counts for Bengaluru.</p>
         </div>
 
         {/* Drone Status Chart */}
@@ -111,10 +138,19 @@ const Analytics = () => {
 
         {/* Zone Performance */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Deliveries by Zone</h3>
-          <div className="h-64 flex items-center justify-center border-2 border-dashed border-gray-300 rounded">
-            <p className="text-gray-500">Bar Chart: Deliveries per operational zone</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Deliveries by Zone (Bengaluru — mock)</h3>
+          <div className="h-48 flex items-end gap-4 border-2 border-dashed border-gray-300 rounded p-4">
+            {mockBengaluru.deliveriesByZone.map((z) => (
+              <div key={z.zone} className="flex-1 text-center">
+                <div className="h-32 flex items-end justify-center">
+                  <div className="bg-indigo-500 w-10 rounded-t" style={{ height: `${(z.count / 60) * 100}%` }} />
+                </div>
+                <div className="text-xs text-gray-600 mt-2">{z.zone}</div>
+                <div className="text-sm font-semibold text-gray-900">{z.count}</div>
+              </div>
+            ))}
           </div>
+          <p className="text-xs text-gray-500 mt-2">Bar values are mocked for Bengaluru zones.</p>
         </div>
 
         {/* Battery Trends */}

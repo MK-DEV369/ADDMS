@@ -67,5 +67,27 @@ api.interceptors.response.use(
 )
 
 export default api
-export const getDrones = () => api.get('/drones/')
-export const addDrone = (droneData: Drone) => api.post('/drones/', droneData)
+
+export const getDrones = () => api.get('/drones/drones/')
+export const addDrone = (droneData: Drone) => api.post('/drones/drones/', droneData)
+export const updateDrone = (id: number, droneData: Partial<Drone>) => api.put(`/drones/drones/${id}/`, droneData)
+export const deleteDrone = (id: number) => api.delete(`/drones/drones/${id}/`)
+
+export const getUsers = () => api.get('/auth/users/')
+export const addUser = (userData: { username: string; email?: string; role?: string; is_active?: boolean; first_name?: string; last_name?: string; phone_number?: string; address?: string }) => api.post('/auth/users/', userData)
+export const updateUser = (id: number, userData: any) => api.put(`/auth/users/${id}/`, userData)
+export const deleteUser = (id: number) => api.delete(`/auth/users/${id}/`)
+
+export const getOrders = () => api.get('/deliveries/orders/')
+export const addOrder = (orderData: any) => api.post('/deliveries/orders/', orderData)
+export const updateOrder = (id: number | string, orderData: any) => api.patch(`/deliveries/orders/${id}/`, orderData)
+export const deleteOrder = (id: number | string) => api.delete(`/deliveries/orders/${id}/`)
+
+export const getRoutes = (params?: { delivery_order?: number | string; optimization_method?: string }) =>
+  api.get('/routes/routes/', { params })
+
+export const getOperationalZones = (params?: { is_active?: boolean }) =>
+  api.get('/zones/operational/', { params })
+
+export const getNoFlyZones = (params?: { is_active?: boolean; zone_type?: string }) =>
+  api.get('/zones/no-fly/', { params })

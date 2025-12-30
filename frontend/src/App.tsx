@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/toaster'
 import { useAuthStore } from '@/store/auth'
+import HomePage from '@/pages/HomePage'
 import LoginPage from '@/pages/LoginPage'
 import DashboardLayout from '@/layouts/DashboardLayout'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -31,6 +32,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/home" element={<HomePage />} />
           <Route
             path="/"
             element={
@@ -72,7 +74,7 @@ function RoleBasedDashboard() {
   } else if (user?.role === 'manager') {
     return <Navigate to="/manager/fleet" replace />
   } else if (user?.role === 'customer') {
-    return <Navigate to="/customer" replace />
+    return <Navigate to="/customer/overview" replace />
   }
 
   return <Navigate to="/login" replace />
@@ -107,7 +109,7 @@ function ManagerRoutes() {
 function CustomerRoutes() {
   return (
     <Routes>
-      <Route index element={<Navigate to="/customer/overview" replace />} />
+      <Route index element={<Overview />} />
       <Route path="overview" element={<Overview />} />
       <Route path="orders" element={<Orders />} />
       <Route path="tracking" element={<Tracking />} />

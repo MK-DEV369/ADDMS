@@ -31,8 +31,8 @@ class DeliveryOrder(models.Model):
     )
     
     # Delivery Details
-    pickup_address = models.TextField()
-    pickup_location = gis_models.PointField(geography=True, srid=4326, spatial_index=True)
+    pickup_address = models.TextField(blank=True, null=True)
+    pickup_location = gis_models.PointField(geography=True, srid=4326, spatial_index=True, blank=True, null=True)
     delivery_address = models.TextField()
     delivery_location = gis_models.PointField(geography=True, srid=4326, spatial_index=True)
     

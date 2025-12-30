@@ -1,140 +1,283 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import {
-  Package, Search, Filter, Bell, CheckCircle, XCircle,
+  Package, Search, Bell, CheckCircle, XCircle,
   Eye, Download, LogOut, User, ChevronDown, Plus
 } from 'lucide-react';
+import { Order, Notification } from '../../lib/types';
+import api, { addOrder, updateOrder as apiUpdateOrder, deleteOrder as apiDeleteOrder } from '../../lib/api'
+import { findNearestPickupLocation, PICKUP_LOCATIONS, PickupLocationWithDistance } from '../../lib/constants'
 
-// Types
-interface Order {
-  id: string;
-  pickupAddress: string;
-  deliveryAddress: string;
-  status: 'pending' | 'assigned' | 'in_transit' | 'delivered' | 'cancelled';
-  packageWeight: number;
-  estimatedCost: number;
-  eta: string;
-  droneId?: string;
-  createdAt: string;
-  completedAt?: string;
-  rating?: number;
-}
-
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-  timestamp: string;
-  read: boolean;
-}
-
-// Mock Data
-const mockOrders: Order[] = [
-  {
-    id: 'ORD-001',
-    pickupAddress: '123 Tech Park, Bangalore',
-    deliveryAddress: '456 MG Road, Bangalore',
-    status: 'in_transit',
-    packageWeight: 2.5,
-    estimatedCost: 250,
-    eta: new Date(Date.now() + 15 * 60000).toISOString(),
-    droneId: 'DRN-042',
-    createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
-  },
-  {
-    id: 'ORD-002',
-    pickupAddress: '789 Koramangala, Bangalore',
-    deliveryAddress: '321 Indiranagar, Bangalore',
-    status: 'delivered',
-    packageWeight: 1.2,
-    estimatedCost: 180,
-    eta: new Date(Date.now() - 120 * 60000).toISOString(),
-    droneId: 'DRN-015',
-    createdAt: new Date(Date.now() - 180 * 60000).toISOString(),
-    completedAt: new Date(Date.now() - 120 * 60000).toISOString(),
-    rating: 5,
-  },
-  {
-    id: 'ORD-003',
-    pickupAddress: '456 Brigade Road, Bangalore',
-    deliveryAddress: '789 Residency Road, Bangalore',
-    status: 'pending',
-    packageWeight: 1.8,
-    estimatedCost: 220,
-    eta: new Date(Date.now() + 45 * 60000).toISOString(),
-    createdAt: new Date(Date.now() - 10 * 60000).toISOString(),
-  },
-];
-
-const mockNotifications: Notification[] = [
-  {
-    id: 'N1',
-    title: 'Delivery In Progress',
-    message: 'Your order ORD-001 is on the way. ETA: 15 minutes',
-    type: 'info',
-    timestamp: new Date(Date.now() - 5 * 60000).toISOString(),
-    read: false,
-  },
-  {
-    id: 'N2',
-    title: 'Order Delivered',
-    message: 'Order ORD-002 has been successfully delivered',
-    type: 'success',
-    timestamp: new Date(Date.now() - 120 * 60000).toISOString(),
-    read: true,
-  },
-];
-
-// Status Badge Component
 const StatusBadge: React.FC<{ status: Order['status'] }> = ({ status }) => {
   const styles = {
     pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     assigned: 'bg-blue-100 text-blue-800 border-blue-200',
     in_transit: 'bg-purple-100 text-purple-800 border-purple-200',
+    delivering: 'bg-purple-100 text-purple-800 border-purple-200',
     delivered: 'bg-green-100 text-green-800 border-green-200',
     cancelled: 'bg-red-100 text-red-800 border-red-200',
-  };
+  } as Record<string, string>;
 
-  const icons = {
+  const icons: Record<string, any> = {
     pending: CheckCircle,
     assigned: CheckCircle,
     in_transit: CheckCircle,
+    delivering: CheckCircle,
     delivered: CheckCircle,
     cancelled: XCircle,
   };
 
-  const Icon = icons[status];
+  const Icon = icons[status] ?? CheckCircle;
 
   return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${styles[status]}`}>
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${styles[status] ?? 'bg-gray-100 text-gray-800 border-gray-200'}`}>
       <Icon className="w-3 h-3" />
-      {status.replace('_', ' ').toUpperCase()}
+      {String(status).replace('_', ' ').toUpperCase()}
     </span>
   );
 };
 
 // New Order Modal Component
-const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void; onCreate?: (order: Order) => void }> = ({ isOpen, onClose, onCreate }) => {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     pickupAddress: '',
     deliveryAddress: '',
+    deliveryLat: '' ,
+    deliveryLng: '' ,
     packageWeight: '',
     packageDimensions: { length: '', width: '', height: '' },
     isFragile: false,
+    packageName: '',
+    packageDescription: '',
+    packageType: 'other',
+    isUrgent: false,
+    requiresTempControl: false,
+    temperatureRange: '',
     priority: 'standard',
     scheduledTime: '',
+    notes: '',
+    droneId: '',
   });
 
+  const [loading, setLoading] = useState(false)
+
+  const [gettingLocation, setGettingLocation] = useState(false)
+  const [selectedPickupLocation, setSelectedPickupLocation] = useState<PickupLocationWithDistance | null>(null)
+
+  const mapDivRef = useRef<HTMLDivElement | null>(null)
+  const mapInstanceRef = useRef<any>(null)
+  const markerRef = useRef<any>(null)
+
+  const canProceedToNext = useCallback(() => {
+    if (step === 1) {
+      return !!formData.packageWeight
+    }
+    if (step === 2) {
+      return !!formData.deliveryAddress || (!!formData.deliveryLat && !!formData.deliveryLng)
+    }
+    return true
+  }, [step, formData])
+
+  // initialize map when step 2 is active
+  useEffect(() => {
+    if (step !== 2) return
+    if (!mapDivRef.current) return
+    if (mapInstanceRef.current) return
+
+    // Inject Leaflet CSS if not present
+    if (!document.querySelector('link[data-leaflet]')) {
+      const link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+      link.setAttribute('data-leaflet', '1')
+      document.head.appendChild(link)
+    }
+
+    import('leaflet').then((L) => {
+      try {
+        const leaflet = (L as any)
+        const map = leaflet.map(mapDivRef.current).setView([12.9716, 77.5946], 12)
+        leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map)
+
+        map.on('click', (e: any) => {
+          const lat = e.latlng.lat
+          const lng = e.latlng.lng
+          setFormData(prev => ({ ...prev, deliveryLat: String(lat), deliveryLng: String(lng) }))
+          if (markerRef.current) {
+            markerRef.current.setLatLng(e.latlng)
+          } else {
+            markerRef.current = leaflet.marker(e.latlng).addTo(map)
+          }
+        })
+
+        // if there are already coords, show marker
+        if (formData.deliveryLat && formData.deliveryLng) {
+          const lat = parseFloat(formData.deliveryLat)
+          const lng = parseFloat(formData.deliveryLng)
+          markerRef.current = leaflet.marker([lat, lng]).addTo(map)
+          map.setView([lat, lng], 14)
+        }
+
+        mapInstanceRef.current = map
+      } catch (err) {
+        console.error('Leaflet init error', err)
+      }
+    }).catch(err => {
+      console.error('Failed to load leaflet', err)
+    })
+  }, [step, formData.deliveryLat, formData.deliveryLng])
+
+  // Auto-calculate nearest pickup location when delivery coordinates change
+  useEffect(() => {
+    if (formData.deliveryLat && formData.deliveryLng) {
+      const lat = parseFloat(formData.deliveryLat)
+      const lng = parseFloat(formData.deliveryLng)
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const nearest = findNearestPickupLocation(lat, lng)
+        setSelectedPickupLocation(nearest)
+      }
+    }
+  }, [formData.deliveryLat, formData.deliveryLng])
+
+  // access auth to determine role for showing pickup field
+  const { user } = useAuthStore()
+
+  // Keep hooks unconditionally called — only early-return after all hooks
   if (!isOpen) return null;
 
-  const handleSubmit = () => {
-    // TODO: API call to create order
-    console.log('Creating order:', formData);
-    onClose();
-    setStep(1);
+  const handleSubmit = async () => {
+    // Build payload matching backend serializers/models
+    const packagePayload: any = {
+      name: formData.packageName?.trim() || 'Package',
+      weight: formData.packageWeight ? parseFloat(String(formData.packageWeight)) : 0,
+      dimensions_length: formData.packageDimensions.length ? parseFloat(String(formData.packageDimensions.length)) : null,
+      dimensions_width: formData.packageDimensions.width ? parseFloat(String(formData.packageDimensions.width)) : null,
+      dimensions_height: formData.packageDimensions.height ? parseFloat(String(formData.packageDimensions.height)) : null,
+      is_fragile: !!formData.isFragile,
+      description: formData.packageDescription?.trim() || '',
+      package_type: formData.packageType,
+      is_urgent: !!formData.isUrgent,
+      requires_temperature_control: !!formData.requiresTempControl,
+      temperature_range: formData.requiresTempControl ? (formData.temperatureRange?.trim() || null) : null,
+    }
+
+    const payload: any = {
+      delivery_address: formData.deliveryAddress?.trim() || '',
+      priority: formData.priority === 'express' ? 2 : 1,
+      estimated_eta: formData.scheduledTime || null,
+      package: packagePayload,
+      notes: formData.notes?.trim() || '',
+    }
+
+    // include delivery coordinates if available (as floats)
+    if (formData.deliveryLat && formData.deliveryLng) {
+      const lat = parseFloat(formData.deliveryLat)
+      const lng = parseFloat(formData.deliveryLng)
+      if (!isNaN(lat) && !isNaN(lng)) {
+        payload.delivery_lat = lat
+        payload.delivery_lng = lng
+        payload.delivery_location_data = {
+          type: 'Point',
+          coordinates: [lng, lat]
+        }
+      }
+    }
+
+    // Validate required fields early to avoid backend 500s (delivery_location is required)
+    if (!formData.deliveryAddress?.trim()) {
+      alert('Delivery address is required')
+      return
+    }
+
+    if (!(payload.delivery_lat && payload.delivery_lng)) {
+      alert('Delivery location coordinates are required. Use the map, geolocation, or enter lat/lng manually.')
+      return
+    }
+
+    // Automatically select nearest pickup location based on delivery coordinates
+    const defaultPickup = PICKUP_LOCATIONS.find(p => p.name.toLowerCase() === 'majestic') || PICKUP_LOCATIONS[0]
+    let pickupLocation: PickupLocationWithDistance = { 
+      id: defaultPickup.id, 
+      name: defaultPickup.name, 
+      coordinates: { lat: defaultPickup.coordinates.lat, lng: defaultPickup.coordinates.lng },
+      distance: 0
+    }; // Default to Majestic base
+    if (formData.deliveryLat && formData.deliveryLng) {
+      const lat = parseFloat(formData.deliveryLat)
+      const lng = parseFloat(formData.deliveryLng)
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const nearest = findNearestPickupLocation(lat, lng)
+        pickupLocation = nearest
+        console.debug(`Nearest pickup location: ${nearest.name} (${nearest.distance.toFixed(2)} km away)`)
+      }
+    }
+
+    // Ensure pickup_address and pickup_location are always included
+    payload.pickup_address = pickupLocation.name
+    // Backend expects pickup_location (PostGIS Point field) - use nearest location's coordinates
+    payload.pickup_location_data = {
+      type: 'Point',
+      coordinates: [pickupLocation.coordinates.lng, pickupLocation.coordinates.lat] // [lng, lat] for GeoJSON
+    }
+    // Also send as separate fields for compatibility
+    payload.pickup_lat = pickupLocation.coordinates.lat
+    payload.pickup_lng = pickupLocation.coordinates.lng
+
+    const parsedDrone = parseInt(String(formData.droneId), 10)
+    if (!Number.isNaN(parsedDrone) && parsedDrone > 0) {
+      payload.drone = parsedDrone
+    }
+
+    // Validate required fields
+    if (!formData.packageWeight || parseFloat(String(formData.packageWeight)) <= 0) {
+      alert('Valid package weight is required')
+      return
+    }
+
+    console.debug('Creating order payload:', JSON.stringify(payload, null, 2))
+    setLoading(true)
+    try {
+      const res = await addOrder(payload)
+      const created = res.data
+      console.debug('Order created:', created)
+      onCreate && onCreate(created)
+      onClose()
+      setStep(1)
+      // Reset form
+      setFormData({
+        pickupAddress: '',
+        deliveryAddress: '',
+        deliveryLat: '',
+        deliveryLng: '',
+        packageWeight: '',
+        packageDimensions: { length: '', width: '', height: '' },
+        isFragile: false,
+        packageName: '',
+        packageDescription: '',
+        packageType: 'other',
+        isUrgent: false,
+        requiresTempControl: false,
+        temperatureRange: '',
+        priority: 'standard',
+        scheduledTime: '',
+        notes: '',
+        droneId: '',
+      })
+    } catch (err: any) {
+      console.error('Failed to create order', err)
+      console.error('Error status:', err?.response?.status)
+      console.error('Error response:', err?.response)
+      console.error('Error data:', err?.response?.data)
+      // show user a detailed error message
+      const errorDetail = err?.response?.data?.detail || err?.response?.data?.error || JSON.stringify(err?.response?.data) || err?.message || 'Server error'
+      alert(`Failed to create order: ${errorDetail}`)
+    } finally {
+      setLoading(false)
+    }
   };
 
   return (
@@ -194,6 +337,43 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Package Name</label>
+                <input
+                  type="text"
+                  value={formData.packageName}
+                  onChange={(e) => setFormData({ ...formData, packageName: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  placeholder="e.g., Documents"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <input
+                  type="text"
+                  value={formData.packageDescription}
+                  onChange={(e) => setFormData({ ...formData, packageDescription: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  placeholder="Brief description"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Package Type</label>
+                <select
+                  value={formData.packageType}
+                  onChange={(e) => setFormData({ ...formData, packageType: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="document">Document</option>
+                  <option value="food">Food</option>
+                  <option value="medical">Medical</option>
+                  <option value="electronics">Electronics</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Dimensions (cm)
                 </label>
@@ -244,6 +424,45 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
                 </label>
               </div>
 
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="urgent"
+                  checked={formData.isUrgent}
+                  onChange={(e) => setFormData({ ...formData, isUrgent: e.target.checked })}
+                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                />
+                <label htmlFor="urgent" className="text-sm text-gray-700">
+                  Urgent
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="tempctrl"
+                  checked={formData.requiresTempControl}
+                  onChange={(e) => setFormData({ ...formData, requiresTempControl: e.target.checked })}
+                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                />
+                <label htmlFor="tempctrl" className="text-sm text-gray-700">
+                  Requires Temperature Control
+                </label>
+              </div>
+
+              {formData.requiresTempControl && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Temperature Range</label>
+                  <input
+                    type="text"
+                    value={formData.temperatureRange}
+                    onChange={(e) => setFormData({ ...formData, temperatureRange: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    placeholder="e.g., 2-8°C"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Priority
@@ -257,6 +476,16 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
                   <option value="express">Express (15-20 min) - +₹100</option>
                 </select>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  placeholder="Any special instructions"
+                />
+              </div>
             </div>
           )}
 
@@ -265,18 +494,21 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Pickup & Delivery Locations</h3>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Pickup Address *
-                </label>
-                <input
-                  type="text"
-                  value={formData.pickupAddress}
-                  onChange={(e) => setFormData({ ...formData, pickupAddress: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  placeholder="Enter pickup address"
-                />
-              </div>
+              {/* Auto-selected pickup location display */}
+              {selectedPickupLocation && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Package className="w-5 h-5 text-blue-600" />
+                    <span className="font-semibold text-blue-900">Auto-Selected Pickup Location</span>
+                  </div>
+                  <p className="text-sm text-blue-800">
+                    <strong>{selectedPickupLocation.name}</strong>
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    {selectedPickupLocation.distance.toFixed(1)} km from delivery location
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -289,7 +521,78 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                   placeholder="Enter delivery address"
                 />
+                <div className="mt-2 flex gap-2 items-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!navigator.geolocation) return alert('Geolocation not supported')
+                      setGettingLocation(true)
+                      const opts: PositionOptions = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                      navigator.geolocation.getCurrentPosition((pos) => {
+                        const lat = pos.coords.latitude.toString()
+                        const lng = pos.coords.longitude.toString()
+                        setFormData(prev => ({ ...prev, deliveryLat: lat, deliveryLng: lng }))
+                        console.debug('Got current location', lat, lng)
+                        setGettingLocation(false)
+                      }, (err: GeolocationPositionError) => {
+                        console.error('Geolocation error', err)
+                        let msg = ''
+                        if (err.code === 1) {
+                          msg = 'Permission denied. Please allow location access.';
+                        } else if (err.code === 2) {
+                          msg = 'Position unavailable. Try picking location on map or enter lat/lng.';
+                        } else if (err.code === 3) {
+                          msg = 'Timeout obtaining position.';
+                        } else {
+                          msg = err.message || 'Unknown error';
+                        }
+                        alert('Could not get current location: ' + msg)
+                        setGettingLocation(false)
+                      }, opts)
+                    }}
+                    disabled={gettingLocation}
+                    className={`px-3 py-1 rounded bg-gray-100 hover:bg-gray-200 text-sm ${gettingLocation ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >{gettingLocation ? 'Detecting...' : 'Use current location'}</button>
+                  <span className="text-xs text-gray-500">{formData.deliveryLat && formData.deliveryLng ? `${formData.deliveryLat}, ${formData.deliveryLng}` : ''}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Delivery Latitude *</label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={formData.deliveryLat}
+                      onChange={(e) => setFormData({ ...formData, deliveryLat: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      placeholder="12.9716"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Delivery Longitude *</label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={formData.deliveryLng}
+                      onChange={(e) => setFormData({ ...formData, deliveryLng: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      placeholder="77.5946"
+                    />
+                  </div>
+                </div>
               </div>
+
+              {user?.role === 'manager' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Drone (ID, optional)</label>
+                  <input
+                    type="number"
+                    value={formData.droneId}
+                    onChange={(e) => setFormData({ ...formData, droneId: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    placeholder="Enter drone ID"
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -347,32 +650,75 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
 
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                 <div className="flex justify-between">
+                  <span className="text-gray-600">Package Name</span>
+                  <span className="font-medium">{formData.packageName || 'Package'}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-gray-600">Package Weight</span>
                   <span className="font-medium">{formData.packageWeight} kg</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Package Type</span>
+                  <span className="font-medium capitalize">{formData.packageType}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Fragile</span>
+                  <span className="font-medium">{formData.isFragile ? 'Yes' : 'No'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Urgent</span>
+                  <span className="font-medium">{formData.isUrgent ? 'Yes' : 'No'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Temp Control</span>
+                  <span className="font-medium">{formData.requiresTempControl ? 'Yes' : 'No'}</span>
+                </div>
+                {formData.requiresTempControl && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Temperature Range</span>
+                    <span className="font-medium">{formData.temperatureRange || '—'}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-600">Priority</span>
                   <span className="font-medium capitalize">{formData.priority}</span>
                 </div>
                 <div className="border-t border-gray-200 pt-3">
                   <div className="flex justify-between items-start">
-                    <span className="text-gray-600">Pickup</span>
-                    <span className="font-medium text-right max-w-xs">{formData.pickupAddress || 'Not set'}</span>
+                    <span className="text-gray-600">Pickup Location</span>
+                    <span className="font-medium text-right max-w-xs">
+                      {selectedPickupLocation ? `${selectedPickupLocation.name} (${selectedPickupLocation.distance.toFixed(2)} km away)` : 'Not set'}
+                    </span>
                   </div>
                 </div>
                 <div className="flex justify-between items-start">
                   <span className="text-gray-600">Delivery</span>
                   <span className="font-medium text-right max-w-xs">{formData.deliveryAddress || 'Not set'}</span>
                 </div>
+                {(formData.deliveryLat && formData.deliveryLng) && (
+                  <div className="flex justify-between items-start">
+                    <span className="text-gray-600">Coordinates</span>
+                    <span className="font-medium text-right max-w-xs">{formData.deliveryLat}, {formData.deliveryLng}</span>
+                  </div>
+                )}
+                {formData.notes && (
+                  <div className="flex justify-between items-start">
+                    <span className="text-gray-600">Notes</span>
+                    <span className="font-medium text-right max-w-xs">{formData.notes}</span>
+                  </div>
+                )}
+                {formData.droneId && (
+                  <div className="flex justify-between items-start">
+                    <span className="text-gray-600">Drone</span>
+                    <span className="font-medium text-right max-w-xs">#{formData.droneId}</span>
+                  </div>
+                )}
               </div>
 
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-700 font-medium">Estimated Cost</span>
-                  <span className="text-2xl font-bold text-purple-600">₹250</span>
-                </div>
-                <div className="text-sm text-gray-600">
-                  Estimated delivery time: 20-30 minutes
+                  <span className="text-gray-700 font-medium">Estimated Delivery Cost</span>
+                  <span className="text-2xl font-bold text-purple-600">₹{formData.priority === 'express' ? 350 : 250}</span> {/* Distance/ETA X 10 rupees per 1 Unit of Electricity idk*/}
                 </div>
               </div>
 
@@ -409,17 +755,22 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
             </button>
             {step < 4 ? (
               <button
-                onClick={() => setStep(step + 1)}
-                className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                onClick={() => {
+                  if (canProceedToNext()) setStep(step + 1)
+                  else alert('Please complete the required fields before continuing')
+                }}
+                disabled={!canProceedToNext()}
+                className={`px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors ${!canProceedToNext() ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 Next
               </button>
             ) : (
               <button
                 onClick={handleSubmit}
-                className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                disabled={loading}
+                className={`px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
-                Confirm Order
+                {loading ? 'Creating...' : 'Confirm Order'}
               </button>
             )}
           </div>
@@ -432,78 +783,92 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
 // Main Orders Component
 export default function Orders() {
   const navigate = useNavigate();
-  const { logout } = useAuthStore();
-  const [orders] = useState<Order[]>(mockOrders);
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const { logout, user } = useAuthStore();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        console.debug('Fetching orders...')
+        const res = await api.get('/deliveries/orders/')
+        const data = res.data.results ?? res.data
+        console.debug('Fetched orders:', data)
+        setOrders(data)
+      } catch (err) {
+        console.error('Failed to fetch orders', err)
+      }
+    }
+
+    const fetchNotifications = async () => {
+      try {
+        console.debug('Fetching notifications...')
+        const res = await api.get('/notifications/notifications/')
+        const data = res.data.results ?? res.data
+        console.debug('Fetched notifications:', data)
+        setNotifications(data)
+      } catch (err) {
+        console.error('Failed to fetch notifications', err)
+      }
+    }
+
+    fetchOrders()
+    fetchNotifications()
+  }, [])
+
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  // // Advance status or delete handlers
+  // const handleAdvanceStatus = async (order: Order) => {
+  //   try {
+  //     const statuses = ['pending', 'assigned', 'in_transit', 'delivering', 'delivered']
+  //     const idx = statuses.indexOf(order.status)
+  //     const nextStatus = idx === -1 ? 'assigned' : (idx < statuses.length - 1 ? statuses[idx + 1] : statuses[idx])
+  //     if (nextStatus === order.status) {
+  //       console.debug('Order already at final status', order.id, order.status)
+  //       return
+  //     }
+  //     console.debug('Updating order status', order.id, '->', nextStatus)
+  //     const res = await apiUpdateOrder(order.id as any, { status: nextStatus })
+  //     const updated = res.data
+  //     setOrders(prev => prev.map(o => (o.id === updated.id ? updated : o)))
+  //   } catch (err) {
+  //     console.error('Failed to update order', err)
+  //   }
+  // }
+
+  const handleDeleteOrder = async (id: number | string) => {
+    if (!window.confirm('Delete this order?')) return
+    try {
+      console.debug('Deleting order', id)
+      await apiDeleteOrder(id as any)
+      setOrders(prev => prev.filter(o => o.id !== id))
+    } catch (err) {
+      console.error('Failed to delete order', err)
+    }
+  }
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          order.pickupAddress.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          order.deliveryAddress.toLowerCase().includes(searchQuery.toLowerCase());
+    const idStr = String(order.id || '')
+    const matchesSearch = idStr.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (order.pickup_address || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (order.delivery_address || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filterStatus === 'all' || order.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
-              <p className="text-sm text-gray-600 mt-1">View and manage all your delivery orders</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Bell className="w-6 h-6" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-0 right-0 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-
-              <div className="relative">
-                <button
-                  onClick={() => setShowUserDropdown(!showUserDropdown)}
-                  className="flex items-center gap-2 p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <User className="w-6 h-6" />
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-
-                {showUserDropdown && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                    <button
-                      onClick={handleLogout}
-                      className="flex items-center gap-2 w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-50"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Logout
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Notifications Panel */}
       {showNotifications && (
@@ -511,7 +876,14 @@ export default function Orders() {
           <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">Notifications</h3>
             <button
-              onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))}
+              onClick={async () => {
+                const snapshot = notifications
+                setNotifications(snapshot.map(n => ({ ...n, is_read: true, read_at: new Date().toISOString() })))
+                // Try to update backend (best-effort)
+                snapshot.filter(n => !n.is_read).forEach(n => {
+                  api.patch(`/notifications/notifications/${n.id}/`, { is_read: true }).catch(() => {})
+                })
+              }}
               className="text-sm text-purple-600 hover:text-purple-700"
             >
               Mark all read
@@ -521,19 +893,19 @@ export default function Orders() {
             {notifications.map((notif) => (
               <div
                 key={notif.id}
-                className={`p-4 hover:bg-gray-50 transition-colors ${!notif.read ? 'bg-purple-50' : ''}`}
+                className={`p-4 hover:bg-gray-50 transition-colors ${!notif.is_read ? 'bg-purple-50' : ''}`}
               >
                 <div className="flex items-start gap-3">
                   <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                    notif.type === 'success' ? 'bg-green-500' :
-                    notif.type === 'error' ? 'bg-red-500' :
-                    notif.type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
+                    notif.notification_type === 'delivery_update' ? 'bg-blue-500' :
+                    notif.notification_type === 'system_alert' ? 'bg-red-500' :
+                    notif.notification_type === 'maintenance' ? 'bg-yellow-500' : 'bg-green-500'
                   }`} />
                   <div className="flex-1">
                     <p className="font-medium text-gray-900 text-sm">{notif.title}</p>
                     <p className="text-gray-600 text-sm mt-1">{notif.message}</p>
                     <p className="text-gray-400 text-xs mt-1">
-                      {new Date(notif.timestamp).toLocaleTimeString()}
+                      {new Date(notif.created_at).toLocaleTimeString()}
                     </p>
                   </div>
                 </div>
@@ -598,24 +970,39 @@ export default function Orders() {
                     <span className="font-medium text-gray-900">{order.id}</span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-sm text-gray-600">{order.deliveryAddress}</span>
+                    <span className="text-sm text-gray-600">{order.delivery_address}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <StatusBadge status={order.status} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="font-medium text-gray-900">₹{order.estimatedCost}</span>
+                    <span className="font-medium text-gray-900">{order.package?.weight ? `${order.package.weight} kg` : '—'}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {new Date(order.createdAt).toLocaleDateString()}
+                    {order.requested_at ? new Date(order.requested_at).toLocaleDateString() : '—'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <button
+                        onClick={() => navigate(`/deliveries/orders/${order.id}/`)}
                         className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                         title="View Details"
                       >
                         <Eye className="w-4 h-4" />
+                      </button>
+                      {/* <button
+                        onClick={() => handleAdvanceStatus(order)}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Advance Status"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button> */}
+                      <button
+                        onClick={() => handleDeleteOrder(order.id as any)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete Order"
+                      >
+                        <XCircle className="w-4 h-4" />
                       </button>
                       {order.status === 'delivered' && (
                         <button
@@ -642,7 +1029,11 @@ export default function Orders() {
       </div>
 
       {/* New Order Modal */}
-      <NewOrderModal isOpen={showNewOrderModal} onClose={() => setShowNewOrderModal(false)} />
+      <NewOrderModal
+        isOpen={showNewOrderModal}
+        onClose={() => setShowNewOrderModal(false)}
+        onCreate={(order) => setOrders(prev => [order, ...prev])}
+      />
     </div>
   );
 }

@@ -10,7 +10,9 @@ from .views import (
     UserProfileView,
     UserListView,
     change_password,
-    forgot_password
+    forgot_password,
+    UserAdminListCreate,
+    UserAdminDetail,
 )
 
 app_name = 'users'
@@ -21,6 +23,9 @@ urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('profile/', UserProfileView.as_view(), name='profile'),
     path('list/', UserListView.as_view(), name='list'),
+    # Admin managed users (list/create and detail CRUD)
+    path('users/', UserAdminListCreate.as_view(), name='users-list'),
+    path('users/<int:pk>/', UserAdminDetail.as_view(), name='users-detail'),
     path('change-password/', change_password, name='change-password'),
     path('forgot-password/', forgot_password, name='forgot-password'),
 ]

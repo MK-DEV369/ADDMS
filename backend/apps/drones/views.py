@@ -59,6 +59,33 @@ class DroneViewSet(viewsets.ModelViewSet):
         
         return Response(DroneSerializer(drone).data)
     
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminOrManager])
+    def update_status(self, request, pk=None):
+        """Update drone status (admin/manager only)"""
+        drone = self.get_object()
+        new_status = request.data.get('status')
+        
+        if not new_status or new_status not in dict(Drone.Status.choices):
+            return Response(
+                {"error": f"Invalid status. Must be one of: {', '.join([s[0] for s in Drone.Status.choices])}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        old_status = drone.status
+        drone.status = new_status
+        drone.save()
+        
+        logger.info(
+            "Drone status updated",
+            namespace="drones",
+            drone_id=drone.id,
+            old_status=old_status,
+            new_status=new_status,
+            user_id=request.user.id
+        )
+        
+        return Response(DroneSerializer(drone).data)
+    
     @action(detail=True, methods=['post'])
     def update_battery(self, request, pk=None):
         """Update drone battery level"""

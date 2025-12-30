@@ -17,8 +17,8 @@ env = environ.Env(
 )
 
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
-GDAL_LIBRARY_PATH="E:\Anaconda\Library\bin\gdal.dll"
-GEOS_LIBRARY_PATH="E:\Anaconda\Library\bin\geos_c.dll"
+GDAL_LIBRARY_PATH=r"E:\Anaconda\Library\bin\gdal.dll"
+GEOS_LIBRARY_PATH=r"E:\Anaconda\Library\bin\geos_c.dll"
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-change-me-in-production-addms-2024')
@@ -36,11 +36,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    # Django extensions
-    'django.contrib.gis',  # PostGIS support
-    
-    # Third-party
+    'django.contrib.gis',
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
@@ -305,6 +301,10 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+# Windows compatibility: Use solo pool (single-threaded) to avoid fork() issues
+CELERY_WORKER_POOL = 'solo'
+CELERY_TASK_ALWAYS_EAGER = False
+CELERY_TASK_EAGER_PROPAGATES = False
 
 # Celery Beat Schedule (periodic tasks)
 CELERY_BEAT_SCHEDULE = {
@@ -315,6 +315,14 @@ CELERY_BEAT_SCHEDULE = {
     'fetch-weather-updates': {
         'task': 'apps.zones.tasks.fetch_weather_updates',
         'schedule': 3600.0,  # Every hour
+    },
+    'simulate-battery-drain': {
+        'task': 'apps.drones.tasks.simulate_battery_drain',
+        'schedule': 60.0,  # Every minute (very slow drain)
+    },
+    'auto-charge-idle-drones': {
+        'task': 'apps.drones.tasks.auto_charge_idle_drones',
+        'schedule': 300.0,  # Every 5 minutes
     },
 }
 

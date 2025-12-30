@@ -9,10 +9,12 @@ import {
   Battery,
   Activity,
   Settings,
-  AlertTriangle
+  AlertTriangle,
+  MapPin
 } from 'lucide-react';
-import api, { getDrones, addDrone } from '@/lib/api';
+import api, { getDrones, addDrone, updateDrone, deleteDrone } from '@/lib/api';
 import { Drone } from '@/lib/types';
+import { PICKUP_LOCATIONS } from '@/lib/constants';
 
 const Drones = () => {
   const [drones, setDrones] = useState<Drone[]>([]);
@@ -30,6 +32,7 @@ const Drones = () => {
     max_altitude: 0,
     max_range: 0,
     battery_capacity: 0,
+    locationId: undefined,
   });
 
   useEffect(() => {
@@ -39,8 +42,9 @@ const Drones = () => {
   const fetchDrones = async () => {
     try {
       const response = await getDrones();
-      console.log('Response:', response);
-      setDrones(response.data);
+      const payload = response.data
+      const results = Array.isArray(payload) ? payload : Array.isArray(payload?.results) ? payload.results : []
+      setDrones(results);
     } catch (error) {
       console.error('Failed to fetch drones', error);
     }
@@ -48,13 +52,88 @@ const Drones = () => {
 
   const handleAddDrone = async () => {
     try {
-      await addDrone(newDrone as Drone);
+      const selectedLocation = PICKUP_LOCATIONS.find(loc => loc.id === (newDrone as any).locationId);
+      
+      const payload = {
+        serial_number: newDrone.serial_number,
+        model: newDrone.model,
+        manufacturer: newDrone.manufacturer,
+        max_payload_weight: Number(newDrone.max_payload_weight) || 0,
+        max_speed: Number(newDrone.max_speed) || 0,
+        max_altitude: Number(newDrone.max_altitude) || 0,
+        max_range: Number(newDrone.max_range) || 0,
+        battery_capacity: Number(newDrone.battery_capacity) || 0,
+        status: newDrone.status || 'idle',
+        notes: (newDrone as any).notes || '',
+        is_active: typeof newDrone.is_active === 'boolean' ? newDrone.is_active : true,
+        // Add location data if selected
+        ...(selectedLocation && {
+          current_position_lat: selectedLocation.coordinates.lat,
+          current_position_lng: selectedLocation.coordinates.lng,
+          home_base: selectedLocation.name,
+        }),
+      }
+      console.debug('[Drones] add payload', payload)
+      const resp = await addDrone(payload as Drone);
+      console.debug('[Drones] add response', resp)
       await fetchDrones();
       closeModal();
     } catch (error) {
-      console.error('Failed to add drone', error);
+    console.error('Failed to add drone', error);
+    let errorMessage = '';
+    if ((error as any).response) {
+      console.error('server response data:', (error as any).response.data);
+      errorMessage = (error as any).response.data.battery_capacity || 'An unknown error occurred';
+    } else {
+      errorMessage = 'An unexpected error occurred. Please try again later.';
+    }
+    alert(errorMessage);
+    console.error('Full error details:', error);
     }
   };
+
+  const handleUpdateDrone = async () => {
+    try {
+      if (!newDrone.id) return
+      const selectedLocation = PICKUP_LOCATIONS.find(loc => loc.id === (newDrone as any).locationId);
+      
+      const payload: Partial<Drone> = {
+        serial_number: newDrone.serial_number,
+        model: newDrone.model,
+        manufacturer: newDrone.manufacturer,
+        max_payload_weight: newDrone.max_payload_weight,
+        max_speed: newDrone.max_speed,
+        max_altitude: newDrone.max_altitude,
+        max_range: newDrone.max_range,
+        battery_capacity: newDrone.battery_capacity,
+        status: newDrone.status,
+        // Add location data if selected
+        ...(selectedLocation && {
+          current_position_lat: selectedLocation.coordinates.lat,
+          current_position_lng: selectedLocation.coordinates.lng,
+          home_base: selectedLocation.name,
+        }),
+      };
+      
+      await updateDrone(newDrone.id, payload)
+      await fetchDrones()
+      closeModal()
+    } catch (err) {
+      console.error('Failed to update drone', err)
+    }
+  }
+
+  const handleDeleteDrone = async () => {
+    try {
+      if (!selectedItem || !selectedItem.id) return
+      if (!confirm(`Delete drone ${selectedItem.serial_number}?`)) return
+      await deleteDrone(selectedItem.id)
+      await fetchDrones()
+      closeModal()
+    } catch (err) {
+      console.error('Failed to delete drone', err)
+    }
+  }
 
   const getStatusColor = (status?: string) => {
     const colors: Record<string, string> = {
@@ -78,6 +157,41 @@ const Drones = () => {
   const openModal = (type: string, item: Drone | null = null) => {
     setModalType(type);
     setSelectedItem(item);
+    if (item) {
+      // Extract location from notes if it exists
+      let locationId = undefined;
+      if (item.home_base) {
+        const location = PICKUP_LOCATIONS.find(loc => loc.name === item.home_base);
+        locationId = location?.id;
+      }
+      
+      setNewDrone({
+        id: item.id,
+        serial_number: item.serial_number,
+        model: item.model,
+        manufacturer: item.manufacturer,
+        max_payload_weight: item.max_payload_weight,
+        max_speed: item.max_speed,
+        max_altitude: item.max_altitude,
+        max_range: item.max_range,
+        battery_capacity: item.battery_capacity,
+        status: item.status,
+        locationId: locationId,
+        home_base: item.home_base,
+      })
+    } else {
+      setNewDrone({
+        serial_number: '',
+        model: '',
+        manufacturer: '',
+        max_payload_weight: 0,
+        max_speed: 0,
+        max_altitude: 0,
+        max_range: 0,
+        battery_capacity: 0,
+        locationId: undefined,
+      })
+    }
     setShowModal(true);
   };
 
@@ -190,8 +304,8 @@ const filteredDrones = Array.isArray(drones)
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Base Location</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Battery</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Update</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
@@ -205,6 +319,12 @@ const filteredDrones = Array.isArray(drones)
                   <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(drone?.status ?? 'idle')}`}>
                     {drone.status}
                   </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-gray-400" />
+                    {drone.home_base || '—'}
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   <div className="flex items-center space-x-2"> 
@@ -237,16 +357,20 @@ const filteredDrones = Array.isArray(drones)
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full my-8">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
                 {modalType === 'addDrone' && 'Add New Drone'}
                 {modalType === 'editDrone' && 'Edit Drone'}
                 {modalType === 'deleteDrone' && 'Delete Drone'}
                 {modalType === 'viewDrone' && 'Drone Details'}
               </h3>
+            </div>
 
+            {/* Content - Scrollable */}
+            <div className="px-6 py-4 max-h-[60vh] overflow-y-auto">
               {modalType === 'viewDrone' && selectedItem && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -269,8 +393,11 @@ const filteredDrones = Array.isArray(drones)
                       <p className={`font-semibold ${getBatteryColor(selectedItem.battery_level ?? 0)}`}>{selectedItem.battery_level ?? 0}%</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Location</p>
-                      {/* <p className="font-semibold text-gray-900">{selectedItem.current_position_lat}, {selectedItem.current_position_lng}</p> drones/drones/{id} */}
+                      <p className="text-sm text-gray-600">Base Location</p>
+                      <div className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-gray-400" />
+                        <p className="font-semibold text-gray-900">{selectedItem.home_base || '—'}</p>
+                      </div>
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Max Payload</p>
@@ -296,99 +423,130 @@ const filteredDrones = Array.isArray(drones)
               )}
 
               {(modalType === 'addDrone' || modalType === 'editDrone') && (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Serial Number</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number *</label>
                     <input
                       type="text"
                       value={newDrone.serial_number}
                       onChange={(e) => setNewDrone({ ...newDrone, serial_number: e.target.value })}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Model</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Model *</label>
                     <input
                       type="text"
                       value={newDrone.model}
                       onChange={(e) => setNewDrone({ ...newDrone, model: e.target.value })}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Manufacturer</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Manufacturer</label>
                     <input
                       type="text"
                       value={newDrone.manufacturer}
                       onChange={(e) => setNewDrone({ ...newDrone, manufacturer: e.target.value })}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Max Payload (kg)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Max Payload (kg)</label>
                     <input
                       type="number"
                       value={newDrone.max_payload_weight}
                       onChange={(e) => setNewDrone({ ...newDrone, max_payload_weight: Number(e.target.value) })}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Max Speed (km/h)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Max Speed (km/h)</label>
                     <input
                       type="number"
                       value={newDrone.max_speed}
                       onChange={(e) => setNewDrone({ ...newDrone, max_speed: Number(e.target.value) })}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Max Altitude (m)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Max Altitude (m)</label>
                     <input
                       type="number"
                       value={newDrone.max_altitude}
                       onChange={(e) => setNewDrone({ ...newDrone, max_altitude: Number(e.target.value) })}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Max Range (km)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Max Range (km)</label>
                     <input
                       type="number"
                       value={newDrone.max_range}
                       onChange={(e) => setNewDrone({ ...newDrone, max_range: Number(e.target.value) })}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Battery Capacity (mAh)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Battery Capacity (mAh)</label>
                     <input
                       type="number"
                       value={newDrone.battery_capacity}
                       onChange={(e) => setNewDrone({ ...newDrone, battery_capacity: Number(e.target.value) })}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <MapPin className="w-4 h-4 inline mr-1" />
+                      Home Base Location {modalType === 'addDrone' && '*'}
+                    </label>
+                    <select
+                      value={(newDrone as any).locationId || ''}
+                      onChange={(e) => setNewDrone({ ...newDrone, locationId: Number(e.target.value) } as any)}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      required={modalType === 'addDrone'}
+                    >
+                      <option value="">Select a location...</option>
+                      {PICKUP_LOCATIONS.map((location) => (
+                        <option key={location.id} value={location.id}>
+                          {location.name} ({location.coordinates.lat.toFixed(4)}, {location.coordinates.lng.toFixed(4)})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-gray-500">
+                      This sets the drone's initial position and home base
+                    </p>
                   </div>
                 </div>
               )}
+            </div>
 
-              <div className="flex space-x-3 mt-6">
+            {/* Footer - Always visible */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+              <div className="flex space-x-3">
                 <button
                   onClick={closeModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium"
                 >
                   {modalType === 'viewDrone' ? 'Close' : 'Cancel'}
                 </button>
                 {modalType !== 'viewDrone' && (
                   <button
-                    onClick={modalType === 'addDrone' ? handleAddDrone : closeModal}
-                    className={`flex-1 px-4 py-2 rounded-lg text-white transition-colors ${
+                    onClick={
+                      modalType === 'addDrone' ? handleAddDrone : 
+                      modalType === 'editDrone' ? handleUpdateDrone : 
+                      modalType === 'deleteDrone' ? handleDeleteDrone : closeModal
+                    }
+                    className={`flex-1 px-4 py-2 rounded-lg text-white transition-colors font-medium ${
                       modalType === 'deleteDrone'
                         ? 'bg-red-600 hover:bg-red-700'
-                        : 'bg-blue-600 hover:bg-blue-700'
+                        : modalType === 'editDrone' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
                     }`}
                   >
-                    {modalType === 'deleteDrone' ? 'Delete' : 'Save'}
+                    {modalType === 'deleteDrone' ? 'Delete' : modalType === 'editDrone' ? 'Update' : 'Save'}
                   </button>
                 )}
               </div>

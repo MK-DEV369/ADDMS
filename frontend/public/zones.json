@@ -1,0 +1,434 @@
+[
+  {
+    "id": 1,
+    "name": "Bangalore International Airport (BIAL) - Primary No-Fly Zone",
+    "type": "no-fly",
+    "description": "Kempegowda International Airport restricted airspace. No drones permitted within 5km radius.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.1939,
+      "lng": 77.7064
+    },
+    "radius": 5000,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 0,
+      "max": 5000
+    },
+    "isActive": true
+  },
+  {
+    "id": 2,
+    "name": "HAL Aerospace Complex - Military No-Fly Zone",
+    "type": "no-fly",
+    "description": "Hindustan Aeronautics Limited (HAL) aerospace facility in Whitefield. Highly restricted airspace.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.1617,
+      "lng": 77.7499
+    },
+    "radius": 2500,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 0,
+      "max": 5000
+    },
+    "isActive": true
+  },
+  {
+    "id": 3,
+    "name": "INS Ashoka Naval Base - Military No-Fly Zone",
+    "type": "no-fly",
+    "description": "Indian Navy training establishment in Bangalore. Restricted airspace for all UAVs.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.0456,
+      "lng": 77.5795
+    },
+    "radius": 2000,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 0,
+      "max": 5000
+    },
+    "isActive": true
+  },
+  {
+    "id": 4,
+    "name": "Yelahanka Air Force Station - Military No-Fly Zone",
+    "type": "no-fly",
+    "description": "Indian Air Force station in North Bangalore. High security restricted area.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.1385,
+      "lng": 77.5988
+    },
+    "radius": 3000,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 0,
+      "max": 5000
+    },
+    "isActive": true
+  },
+  {
+    "id": 5,
+    "name": "Parliament House Area - Government No-Fly Zone",
+    "type": "no-fly",
+    "description": "Legislative Assembly of Karnataka and high-security government buildings. No-fly zone.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.1881,
+      "lng": 77.5917
+    },
+    "radius": 1500,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 0,
+      "max": 5000
+    },
+    "isActive": true
+  },
+  {
+    "id": 6,
+    "name": "Vidhana Soudha Complex - Government No-Fly Zone",
+    "type": "no-fly",
+    "description": "State secretariat and government offices. Highly restricted airspace.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.1857,
+      "lng": 77.5902
+    },
+    "radius": 1000,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 0,
+      "max": 5000
+    },
+    "isActive": true
+  },
+  {
+    "id": 7,
+    "name": "Bangalore Fort Area - Heritage No-Fly Zone",
+    "type": "no-fly",
+    "description": "Historic monument and government offices. No-fly zone for heritage protection.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.1876,
+      "lng": 77.6244
+    },
+    "radius": 800,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 0,
+      "max": 5000
+    },
+    "isActive": true
+  },
+  {
+    "id": 8,
+    "name": "Central Business District - Downtown Bangalore",
+    "type": "warning",
+    "description": "High-density commercial area with tall buildings. Use caution - low altitude operations not recommended.",
+    "shape": "polygon",
+    "polygon": [
+      { "lat": 13.1926, "lng": 77.5944 },
+      { "lat": 13.1900, "lng": 77.6100 },
+      { "lat": 13.1750, "lng": 77.6050 },
+      { "lat": 13.1770, "lng": 77.5850 }
+    ],
+    "altitudeRange": {
+      "min": 100,
+      "max": 3000
+    },
+    "isActive": true
+  },
+  {
+    "id": 9,
+    "name": "Whitefield IT Hub - Congested Tech Zone",
+    "type": "warning",
+    "description": "Dense IT corridor with multiple office buildings. Limited airspace - maintain altitude above 300m.",
+    "shape": "polygon",
+    "polygon": [
+      { "lat": 13.1710, "lng": 77.7250 },
+      { "lat": 13.1650, "lng": 77.7400 },
+      { "lat": 13.1500, "lng": 77.7350 },
+      { "lat": 13.1550, "lng": 77.7150 }
+    ],
+    "altitudeRange": {
+      "min": 300,
+      "max": 4000
+    },
+    "isActive": true
+  },
+  {
+    "id": 10,
+    "name": "Koramangala Residential Area",
+    "type": "warning",
+    "description": "High-density residential and commercial zone. Sensitive area - operations above 200m recommended.",
+    "shape": "polygon",
+    "polygon": [
+      { "lat": 13.0352, "lng": 77.6245 },
+      { "lat": 13.0280, "lng": 77.6350 },
+      { "lat": 13.0200, "lng": 77.6200 },
+      { "lat": 13.0290, "lng": 77.6100 }
+    ],
+    "altitudeRange": {
+      "min": 200,
+      "max": 3500
+    },
+    "isActive": true
+  },
+  {
+    "id": 11,
+    "name": "MG Road - High Traffic Commercial Zone",
+    "type": "warning",
+    "description": "Major commercial thoroughfare with dense pedestrian and vehicular traffic. Exercise caution.",
+    "shape": "polygon",
+    "polygon": [
+      { "lat": 13.1751, "lng": 77.6053 },
+      { "lat": 13.1650, "lng": 77.5950 },
+      { "lat": 13.1620, "lng": 77.6100 },
+      { "lat": 13.1720, "lng": 77.6150 }
+    ],
+    "altitudeRange": {
+      "min": 150,
+      "max": 3000
+    },
+    "isActive": true
+  },
+  {
+    "id": 12,
+    "name": "Indiranagar Lake - Scenic/Recreational Area",
+    "type": "operational",
+    "description": "Lake and park area suitable for drone operations. Open airspace - operational zone.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.3615,
+      "lng": 77.6461
+    },
+    "radius": 500,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 10,
+      "max": 4000
+    },
+    "isActive": true
+  },
+  {
+    "id": 13,
+    "name": "Cubbon Park - Central Recreation Area",
+    "type": "operational",
+    "description": "Large urban park in city center. Operational zone with open airspace for delivery drones.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.1878,
+      "lng": 77.5945
+    },
+    "radius": 400,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 10,
+      "max": 3500
+    },
+    "isActive": true
+  },
+  {
+    "id": 14,
+    "name": "Majestic Transport Hub Zone",
+    "type": "operational",
+    "description": "Major transport interchange area. Operational zone with monitored airspace.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.3607,
+      "lng": 75.3671
+    },
+    "radius": 300,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 50,
+      "max": 3000
+    },
+    "isActive": true
+  },
+  {
+    "id": 15,
+    "name": "Electronic City IT Park - Industrial Zone",
+    "type": "operational",
+    "description": "Major IT and industrial park. Operational zone for light delivery operations.",
+    "shape": "polygon",
+    "polygon": [
+      { "lat": 12.8565, "lng": 77.6760 },
+      { "lat": 12.8500, "lng": 77.6950 },
+      { "lat": 12.8350, "lng": 77.6900 },
+      { "lat": 12.8400, "lng": 77.6700 }
+    ],
+    "altitudeRange": {
+      "min": 50,
+      "max": 4000
+    },
+    "isActive": true
+  },
+  {
+    "id": 16,
+    "name": "Mysore Road Industrial Corridor",
+    "type": "operational",
+    "description": "Industrial and warehouse zone south of Bangalore. Suitable for drone deliveries.",
+    "shape": "polygon",
+    "polygon": [
+      { "lat": 13.0250, "lng": 77.5700 },
+      { "lat": 13.0150, "lng": 77.5900 },
+      { "lat": 12.9950, "lng": 77.5850 },
+      { "lat": 13.0050, "lng": 77.5650 }
+    ],
+    "altitudeRange": {
+      "min": 50,
+      "max": 4000
+    },
+    "isActive": true
+  },
+  {
+    "id": 17,
+    "name": "Hinjewadi Tech Park - Pune Nearby",
+    "type": "operational",
+    "description": "IT park in Pune area (nearby Bangalore region). Operational delivery zone.",
+    "shape": "circle",
+    "center": {
+      "lat": 18.5898,
+      "lng": 73.7997
+    },
+    "radius": 600,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 50,
+      "max": 3500
+    },
+    "isActive": true
+  },
+  {
+    "id": 18,
+    "name": "Bengaluru Tech Park - Outer Ring Road",
+    "type": "operational",
+    "description": "IT and tech corridor on outer ring road. Operational delivery zone with moderate traffic.",
+    "shape": "polygon",
+    "polygon": [
+      { "lat": 13.1100, "lng": 77.6800 },
+      { "lat": 13.1050, "lng": 77.7100 },
+      { "lat": 13.0850, "lng": 77.7050 },
+      { "lat": 13.0900, "lng": 77.6750 }
+    ],
+    "altitudeRange": {
+      "min": 50,
+      "max": 3500
+    },
+    "isActive": true
+  },
+  {
+    "id": 19,
+    "name": "Hebbal Lake - Water Body No-Fly Zone",
+    "type": "no-fly",
+    "description": "Water body with restricted airspace. Cannot operate over water for safety reasons.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.3778,
+      "lng": 77.6058
+    },
+    "radius": 1500,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 0,
+      "max": 5000
+    },
+    "isActive": true
+  },
+  {
+    "id": 20,
+    "name": "Sankey Tank - Water Body No-Fly Zone",
+    "type": "no-fly",
+    "description": "Water reservoir in central Bangalore. No-fly zone for water safety.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.1865,
+      "lng": 77.5694
+    },
+    "radius": 800,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 0,
+      "max": 5000
+    },
+    "isActive": true
+  },
+  {
+    "id": 21,
+    "name": "Bannerghatta National Park - Ecological Zone",
+    "type": "warning",
+    "description": "National park south of Bangalore. Wildlife conservation area - limited operations permitted.",
+    "shape": "circle",
+    "center": {
+      "lat": 12.7552,
+      "lng": 77.6245
+    },
+    "radius": 3000,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 500,
+      "max": 3500
+    },
+    "isActive": true
+  },
+  {
+    "id": 22,
+    "name": "Central Silk Board Area - Industrial Zone",
+    "type": "operational",
+    "description": "Silk industry and manufacturing zone. Operational for delivery drones.",
+    "shape": "circle",
+    "center": {
+      "lat": 13.2231,
+      "lng": 77.4950
+    },
+    "radius": 500,
+    "polygon": [],
+    "altitudeRange": {
+      "min": 50,
+      "max": 3500
+    },
+    "isActive": true
+  },
+  {
+    "id": 23,
+    "name": "Bellandur Tech Corridor - IT Zone",
+    "type": "operational",
+    "description": "Major IT and commercial corridor in East Bangalore. Operational delivery zone.",
+    "shape": "polygon",
+    "polygon": [
+      { "lat": 12.9563, "lng": 77.6878 },
+      { "lat": 12.9450, "lng": 77.7150 },
+      { "lat": 12.9250, "lng": 77.7100 },
+      { "lat": 12.9350, "lng": 77.6800 }
+    ],
+    "altitudeRange": {
+      "min": 50,
+      "max": 3500
+    },
+    "isActive": true
+  },
+  {
+    "id": 24,
+    "name": "Sarjapur Road Residential - Caution Zone",
+    "type": "warning",
+    "description": "Developing residential corridor. Moderate traffic and population density.",
+    "shape": "polygon",
+    "polygon": [
+      { "lat": 12.8900, "lng": 77.6700 },
+      { "lat": 12.8800, "lng": 77.7050 },
+      { "lat": 12.8600, "lng": 77.7000 },
+      { "lat": 12.8700, "lng": 77.6650 }
+    ],
+    "altitudeRange": {
+      "min": 100,
+      "max": 3500
+    },
+    "isActive": true
+  }
+]

@@ -1,12 +1,13 @@
 """
 User views for authentication and profile management
 """
-from rest_framework import generics, permissions, status
+from rest_framework import viewsets, generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
 from django.contrib.auth import update_session_auth_hash
+from .models import User
 import structlog
 
 from .serializers import (
@@ -19,6 +20,12 @@ from .serializers import (
 
 User = get_user_model()
 logger = structlog.get_logger(__name__)
+
+
+# Permission helper for role-based admin access
+class IsRoleAdmin(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and getattr(request.user, 'is_admin', lambda: False)())
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -64,9 +71,35 @@ class UserListView(generics.ListAPIView):
         if user.is_admin():
             return User.objects.all()
         elif user.is_manager():
-            # Managers can see customers
             return User.objects.filter(role=User.Role.CUSTOMER)
         return User.objects.none()
+
+
+class UserAdminListCreate(generics.ListCreateAPIView):
+    """Admin list and create users (admin only)"""
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated, IsRoleAdmin]
+
+    def create(self, request, *args, **kwargs):
+        # allow admin to create users (no password handling here)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        logger.info("Admin created user", namespace="users", user_id=user.id, created_by=request.user.id)
+        return Response(self.get_serializer(user).data, status=status.HTTP_201_CREATED)
+
+
+class UserAdminDetail(generics.RetrieveUpdateDestroyAPIView):
+    """Admin retrieve/update/delete a user"""
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated, IsRoleAdmin]
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        logger.info("Admin deleting user", namespace="users", user_id=instance.id, deleted_by=request.user.id)
+        return super().destroy(request, *args, **kwargs)
 
 
 @api_view(['POST'])

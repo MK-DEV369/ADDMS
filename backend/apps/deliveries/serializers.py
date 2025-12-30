@@ -25,54 +25,79 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
     package = PackageSerializer()
     customer_username = serializers.CharField(source='customer.username', read_only=True)
     drone_serial_number = serializers.CharField(source='drone.serial_number', read_only=True)
-    pickup_lat = serializers.SerializerMethodField()
-    pickup_lng = serializers.SerializerMethodField()
-    delivery_lat = serializers.SerializerMethodField()
-    delivery_lng = serializers.SerializerMethodField()
+    pickup_lat = serializers.FloatField(required=False, write_only=True, allow_null=True)
+    pickup_lng = serializers.FloatField(required=False, write_only=True, allow_null=True)
+    delivery_lat = serializers.FloatField(required=False, write_only=True, allow_null=True)
+    delivery_lng = serializers.FloatField(required=False, write_only=True, allow_null=True)
+    pickup_location_data = serializers.JSONField(required=False, write_only=True, allow_null=True)
+    delivery_location_data = serializers.JSONField(required=False, write_only=True, allow_null=True)
+    
+    pickup_lat_read = serializers.SerializerMethodField()
+    pickup_lng_read = serializers.SerializerMethodField()
+    delivery_lat_read = serializers.SerializerMethodField()
+    delivery_lng_read = serializers.SerializerMethodField()
     
     class Meta:
         model = DeliveryOrder
         fields = [
             'id', 'customer', 'customer_username',
-            'pickup_address', 'pickup_location', 'pickup_lat', 'pickup_lng',
-            'delivery_address', 'delivery_location', 'delivery_lat', 'delivery_lng',
+            'pickup_address', 'pickup_location', 'pickup_lat', 'pickup_lng', 'pickup_lat_read', 'pickup_lng_read',
+            'delivery_address', 'delivery_location', 'delivery_lat', 'delivery_lng', 'delivery_lat_read', 'delivery_lng_read',
             'package', 'drone', 'drone_serial_number',
             'status', 'requested_at', 'assigned_at', 'picked_up_at', 'delivered_at',
             'estimated_eta', 'actual_delivery_time', 'optimized_route',
-            'priority', 'notes'
+            'priority', 'notes', 'pickup_location_data', 'delivery_location_data'
         ]
         read_only_fields = [
             'id', 'requested_at', 'assigned_at', 'picked_up_at',
-            'delivered_at', 'actual_delivery_time'
+            'delivered_at', 'actual_delivery_time', 'customer', 'optimized_route',
+            'pickup_location', 'delivery_location', 'pickup_lat_read', 'pickup_lng_read',
+            'delivery_lat_read', 'delivery_lng_read'
         ]
     
-    def get_pickup_lat(self, obj):
+    def get_pickup_lat_read(self, obj):
         return obj.pickup_location.y if obj.pickup_location else None
     
-    def get_pickup_lng(self, obj):
+    def get_pickup_lng_read(self, obj):
         return obj.pickup_location.x if obj.pickup_location else None
     
-    def get_delivery_lat(self, obj):
+    def get_delivery_lat_read(self, obj):
         return obj.delivery_location.y if obj.delivery_location else None
     
-    def get_delivery_lng(self, obj):
+    def get_delivery_lng_read(self, obj):
         return obj.delivery_location.x if obj.delivery_location else None
     
     def create(self, validated_data):
+        from django.contrib.gis.geos import Point
+        
         package_data = validated_data.pop('package')
         package = Package.objects.create(**package_data)
         
-        # Extract location data
-        from django.contrib.gis.geos import Point
-        pickup_lat = self.initial_data.get('pickup_lat')
-        pickup_lng = self.initial_data.get('pickup_lng')
-        delivery_lat = self.initial_data.get('delivery_lat')
-        delivery_lng = self.initial_data.get('delivery_lng')
+        # Extract location data - handle both formats
+        # Format 1: GeoJSON object (from frontend)
+        pickup_location_data = validated_data.pop('pickup_location_data', None)
+        delivery_location_data = validated_data.pop('delivery_location_data', None)
         
-        if pickup_lat and pickup_lng:
+        # Format 2: lat/lng fields
+        pickup_lat = validated_data.pop('pickup_lat', None)
+        pickup_lng = validated_data.pop('pickup_lng', None)
+        delivery_lat = validated_data.pop('delivery_lat', None)
+        delivery_lng = validated_data.pop('delivery_lng', None)
+        
+        # Process pickup location
+        if pickup_location_data and isinstance(pickup_location_data, dict):
+            coords = pickup_location_data.get('coordinates', [])
+            if len(coords) >= 2:
+                validated_data['pickup_location'] = Point(float(coords[0]), float(coords[1]), srid=4326)
+        elif pickup_lat is not None and pickup_lng is not None:
             validated_data['pickup_location'] = Point(float(pickup_lng), float(pickup_lat), srid=4326)
         
-        if delivery_lat and delivery_lng:
+        # Process delivery location
+        if delivery_location_data and isinstance(delivery_location_data, dict):
+            coords = delivery_location_data.get('coordinates', [])
+            if len(coords) >= 2:
+                validated_data['delivery_location'] = Point(float(coords[0]), float(coords[1]), srid=4326)
+        elif delivery_lat is not None and delivery_lng is not None:
             validated_data['delivery_location'] = Point(float(delivery_lng), float(delivery_lat), srid=4326)
         
         order = DeliveryOrder.objects.create(package=package, **validated_data)
