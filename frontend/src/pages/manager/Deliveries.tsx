@@ -1,15 +1,11 @@
 import { useState, useEffect } from 'react'
 import {
-  Package,
-  MapPin,
   Clock,
   CheckCircle,
-  AlertTriangle,
-  Truck,
-  Eye
+  Truck
 } from 'lucide-react'
 import { Order } from '@/lib/types'
-import api, { getOrders, updateOrder as apiUpdateOrder } from '@/lib/api'
+import { getOrders, updateOrder as apiUpdateOrder } from '@/lib/api'
 
 export default function Deliveries() {
   const [orders, setOrders] = useState<Order[]>([])
@@ -46,27 +42,6 @@ export default function Deliveries() {
       case 'cancelled': return 'bg-red-500'
       case 'failed': return 'bg-red-700'
       default: return 'bg-gray-500'
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'delivered': return <CheckCircle className="w-4 h-4" />
-      case 'in_transit': return <Truck className="w-4 h-4" />
-      case 'pending': return <Clock className="w-4 h-4" />
-      case 'failed':
-      case 'cancelled': return <AlertTriangle className="w-4 h-4" />
-      default: return <Package className="w-4 h-4" />
-    }
-  }
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return 'bg-red-100 text-red-800'
-      case 'high': return 'bg-orange-100 text-orange-800'
-      case 'medium': return 'bg-yellow-100 text-yellow-800'
-      case 'low': return 'bg-green-100 text-green-800'
-      default: return 'bg-gray-100 text-gray-800'
     }
   }
 
@@ -176,6 +151,24 @@ export default function Deliveries() {
 
                   <div className="text-sm text-gray-600">
                     {order.package?.weight}kg
+                  </div>
+
+                  <div className="text-sm text-gray-700 text-right">
+                    {order.estimated_eta ? (
+                      <div>
+                        <div className="font-semibold text-gray-900">ETA</div>
+                        <div>{new Date(order.estimated_eta).toLocaleTimeString()}</div>
+                        {order.estimated_duration_minutes ? (
+                          <div className="text-xs text-gray-500">~{order.estimated_duration_minutes} mins</div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-500">ETA pending</div>
+                    )}
+                  </div>
+
+                  <div className="text-sm font-semibold text-purple-700 min-w-[90px] text-right">
+                    {order.total_cost != null ? `₹${order.total_cost.toFixed(2)}` : 'Cost TBD'}
                   </div>
 
                   <button

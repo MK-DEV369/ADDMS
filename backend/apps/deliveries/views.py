@@ -13,6 +13,8 @@ from .serializers import (
     PackageSerializer,
     OrderStatusHistorySerializer
 )
+from apps.routes.serializers import RouteSerializer
+from apps.routes.models import Route
 from apps.users.permissions import IsAdminOrManager
 
 logger = structlog.get_logger(__name__)
@@ -132,6 +134,16 @@ class DeliveryOrderViewSet(viewsets.ModelViewSet):
         )
         
         return Response(DeliveryOrderSerializer(order).data)
+
+    @action(detail=True, methods=['get'])
+    def route(self, request, pk=None):
+        """Return optimized route for this order if available"""
+        order = self.get_object()
+        try:
+            route = Route.objects.select_related('delivery_order').prefetch_related('waypoints').get(delivery_order=order)
+        except Route.DoesNotExist:
+            return Response({'detail': 'Route not available'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(RouteSerializer(route).data)
 
 
 class PackageViewSet(viewsets.ModelViewSet):

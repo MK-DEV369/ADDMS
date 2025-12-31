@@ -36,7 +36,7 @@ class NoFlyZoneSerializer(serializers.ModelSerializer):
         model = NoFlyZone
         fields = [
             'id', 'name', 'description', 'zone_type', 'boundary', 'boundary_geojson',
-            'altitude_min', 'altitude_max', 'is_active',
+            'severity', 'altitude_min', 'altitude_max', 'is_active',
             'valid_from', 'valid_until',
             'created_at', 'updated_at', 'created_by', 'created_by_username'
         ]

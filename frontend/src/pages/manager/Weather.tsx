@@ -219,6 +219,12 @@ export default function Weather() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <button

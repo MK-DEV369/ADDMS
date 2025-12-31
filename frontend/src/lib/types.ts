@@ -120,8 +120,18 @@ export interface Order {
     picked_up_at?: string | null;
     delivered_at?: string | null;
     estimated_eta?: string | null;
+    estimated_duration_minutes?: number | null;
+    total_cost?: number | null;
     actual_delivery_time?: string | null;
     optimized_route?: number | null;
+    route_summary?: {
+        route_id: number;
+        distance_km: number | null;
+        estimated_duration_minutes: number | null;
+        estimated_eta: string | null;
+        waypoint_count: number | null;
+    } | null;
+    route?: Route | null;
     priority?: number;
     notes?: string | null;
 }

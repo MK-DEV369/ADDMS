@@ -71,6 +71,7 @@ export default api
 export const getDrones = () => api.get('/drones/drones/')
 export const addDrone = (droneData: Drone) => api.post('/drones/drones/', droneData)
 export const updateDrone = (id: number, droneData: Partial<Drone>) => api.put(`/drones/drones/${id}/`, droneData)
+export const patchDrone = (id: number, droneData: Partial<Drone>) => api.patch(`/drones/drones/${id}/`, droneData)
 export const deleteDrone = (id: number) => api.delete(`/drones/drones/${id}/`)
 
 export const getUsers = () => api.get('/auth/users/')

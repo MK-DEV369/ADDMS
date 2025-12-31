@@ -3,6 +3,7 @@ Delivery serializers
 """
 from rest_framework import serializers
 from .models import DeliveryOrder, Package, OrderStatusHistory
+from apps.routes.serializers import RouteSerializer
 
 
 class PackageSerializer(serializers.ModelSerializer):
@@ -31,6 +32,9 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
     delivery_lng = serializers.FloatField(required=False, write_only=True, allow_null=True)
     pickup_location_data = serializers.JSONField(required=False, write_only=True, allow_null=True)
     delivery_location_data = serializers.JSONField(required=False, write_only=True, allow_null=True)
+
+    route_summary = serializers.SerializerMethodField(read_only=True)
+    route = serializers.SerializerMethodField(read_only=True)
     
     pickup_lat_read = serializers.SerializerMethodField()
     pickup_lng_read = serializers.SerializerMethodField()
@@ -45,12 +49,14 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
             'delivery_address', 'delivery_location', 'delivery_lat', 'delivery_lng', 'delivery_lat_read', 'delivery_lng_read',
             'package', 'drone', 'drone_serial_number',
             'status', 'requested_at', 'assigned_at', 'picked_up_at', 'delivered_at',
-            'estimated_eta', 'actual_delivery_time', 'optimized_route',
-            'priority', 'notes', 'pickup_location_data', 'delivery_location_data'
+            'estimated_eta', 'estimated_duration_minutes', 'total_cost', 'actual_delivery_time', 'optimized_route',
+            'priority', 'notes', 'pickup_location_data', 'delivery_location_data',
+            'route_summary', 'route'
         ]
         read_only_fields = [
             'id', 'requested_at', 'assigned_at', 'picked_up_at',
             'delivered_at', 'actual_delivery_time', 'customer', 'optimized_route',
+            'estimated_duration_minutes', 'total_cost', 'route_summary', 'route',
             'pickup_location', 'delivery_location', 'pickup_lat_read', 'pickup_lng_read',
             'delivery_lat_read', 'delivery_lng_read'
         ]
@@ -66,6 +72,25 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
     
     def get_delivery_lng_read(self, obj):
         return obj.delivery_location.x if obj.delivery_location else None
+
+    def get_route_summary(self, obj):
+        route = getattr(obj, 'optimized_route', None)
+        if not route:
+            return None
+        waypoint_count = route.waypoints.count() if hasattr(route, 'waypoints') else None
+        return {
+            'route_id': route.id,
+            'distance_km': float(route.total_distance) if route.total_distance is not None else None,
+            'estimated_duration_minutes': route.estimated_duration,
+            'estimated_eta': route.estimated_eta,
+            'waypoint_count': waypoint_count,
+        }
+
+    def get_route(self, obj):
+        route = getattr(obj, 'optimized_route', None)
+        if not route:
+            return None
+        return RouteSerializer(route).data
     
     def create(self, validated_data):
         from django.contrib.gis.geos import Point

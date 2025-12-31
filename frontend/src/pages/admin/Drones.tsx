@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Plane,
   Plus,
@@ -12,14 +12,52 @@ import {
   AlertTriangle,
   MapPin
 } from 'lucide-react';
-import api, { getDrones, addDrone, updateDrone, deleteDrone } from '@/lib/api';
-import { Drone } from '@/lib/types';
+import { getDrones, addDrone, deleteDrone, getOrders, updateOrder, patchDrone } from '@/lib/api';
+import { Drone, Order } from '@/lib/types';
 import { PICKUP_LOCATIONS } from '@/lib/constants';
+
+type SortKey = 'serial' | 'status' | 'battery' | 'lastHeartbeat' | 'model' | 'homeBase';
+
+const DRONE_STATUS_OPTIONS: { value: Drone['status']; label: string }[] = [
+  { value: 'idle', label: 'Idle' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'delivering', label: 'Delivering' },
+  { value: 'returning', label: 'Returning' },
+  { value: 'charging', label: 'Charging' },
+  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'offline', label: 'Offline' },
+];
+
+const STATUS_PRIORITY: Record<string, number> = {
+  delivering: 0,
+  assigned: 1,
+  returning: 2,
+  charging: 3,
+  idle: 4,
+  maintenance: 5,
+  offline: 6,
+};
+
+const ACTIVE_STATUSES = ['assigned', 'delivering', 'returning', 'charging'];
+
+const SORT_OPTIONS = [
+  { value: 'serial', label: 'Serial Number' },
+  { value: 'status', label: 'Status (priority)' },
+  { value: 'battery', label: 'Battery' },
+  { value: 'lastHeartbeat', label: 'Last Update' },
+  { value: 'model', label: 'Model' },
+  { value: 'homeBase', label: 'Home Base' },
+];
 
 const Drones = () => {
   const [drones, setDrones] = useState<Drone[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [sortBy, setSortBy] = useState<SortKey>('status');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [updatingDroneId, setUpdatingDroneId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [selectedItem, setSelectedItem] = useState<Drone | null>(null);
@@ -36,8 +74,17 @@ const Drones = () => {
   });
 
   useEffect(() => {
-    fetchDrones();
+    fetchInitialData();
   }, []);
+
+  const fetchInitialData = async () => {
+    try {
+      setIsLoading(true);
+      await Promise.all([fetchDrones(), fetchOrders()]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchDrones = async () => {
     try {
@@ -47,6 +94,17 @@ const Drones = () => {
       setDrones(results);
     } catch (error) {
       console.error('Failed to fetch drones', error);
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      const response = await getOrders();
+      const payload = response.data;
+      const results = Array.isArray(payload) ? payload : Array.isArray(payload?.results) ? payload.results : [];
+      setOrders(results);
+    } catch (error) {
+      console.error('Failed to fetch orders for assignment', error);
     }
   };
 
@@ -115,7 +173,7 @@ const Drones = () => {
         }),
       };
       
-      await updateDrone(newDrone.id, payload)
+      await patchDrone(newDrone.id, payload)
       await fetchDrones()
       closeModal()
     } catch (err) {
@@ -152,6 +210,139 @@ const Drones = () => {
     if (level > 60) return 'text-green-600';
     if (level > 30) return 'text-yellow-600';
     return 'text-red-600';
+  };
+
+  const normalizeDrone = (drone: Drone): Drone => {
+    const batteryLevel = Number(drone.battery_level ?? (drone as any).battery ?? 0);
+    return {
+      ...drone,
+      battery_level: Number.isNaN(batteryLevel) ? 0 : batteryLevel,
+      status: drone.status || 'idle',
+      position: drone.position || {
+        lat: Number(drone.current_position_lat ?? 0),
+        lng: Number(drone.current_position_lng ?? 0),
+        altitude: Number(drone.current_altitude ?? 0),
+      },
+      last_heartbeat: drone.last_heartbeat || '—',
+    };
+  };
+
+  const normalizedDrones = useMemo(
+    () => (Array.isArray(drones) ? drones.map(normalizeDrone) : []),
+    [drones]
+  );
+
+  const filteredDrones = useMemo(() => {
+    return normalizedDrones.filter((drone) => {
+      const matchesSearch =
+        drone.serial_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        drone.model.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesStatus =
+        selectedStatus === 'all'
+          ? true
+          : selectedStatus === 'active'
+            ? ACTIVE_STATUSES.includes(drone.status || '')
+            : drone.status === selectedStatus;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [normalizedDrones, searchTerm, selectedStatus]);
+
+  const sortedDrones = useMemo(() => {
+    const sorted = [...filteredDrones].sort((a, b) => {
+      const direction = sortDir === 'asc' ? 1 : -1;
+
+      switch (sortBy) {
+        case 'status': {
+          const rankA = STATUS_PRIORITY[a.status || 'idle'] ?? 99;
+          const rankB = STATUS_PRIORITY[b.status || 'idle'] ?? 99;
+          return direction * (rankA - rankB);
+        }
+        case 'battery': {
+          const diff = (a.battery_level ?? 0) - (b.battery_level ?? 0);
+          return direction * diff;
+        }
+        case 'lastHeartbeat': {
+          const tsA = a.last_heartbeat ? new Date(a.last_heartbeat).getTime() : 0;
+          const tsB = b.last_heartbeat ? new Date(b.last_heartbeat).getTime() : 0;
+          const safeA = Number.isNaN(tsA) ? 0 : tsA;
+          const safeB = Number.isNaN(tsB) ? 0 : tsB;
+          return direction * (safeB - safeA);
+        }
+        case 'model':
+          return direction * a.model.localeCompare(b.model);
+        case 'homeBase':
+          return direction * (a.home_base || '').localeCompare(b.home_base || '');
+        case 'serial':
+        default:
+          return direction * a.serial_number.localeCompare(b.serial_number);
+      }
+    });
+
+    return sorted;
+  }, [filteredDrones, sortBy, sortDir]);
+
+  const getCurrentOrderForDrone = (droneId?: number) =>
+    orders.find((order) => order.drone === droneId);
+
+  const availableOrdersForDrone = (droneId?: number) =>
+    orders.filter(
+      (order) =>
+        !['delivered', 'failed', 'cancelled'].includes(order.status) &&
+        (!order.drone || order.drone === droneId)
+    );
+
+  const formatOrderLabel = (order: Order) => {
+    const humanStatus = order.status.replace(/_/g, ' ');
+    const packageName = (order as any).package?.name || order.delivery_address || 'Order';
+    return `#${order.id} - ${packageName} - ${humanStatus}`;
+  };
+
+  const handleStatusChange = async (droneId: number, nextStatus: Drone['status']) => {
+    if (!droneId) return;
+
+    try {
+      setUpdatingDroneId(droneId);
+      await patchDrone(droneId, { status: nextStatus });
+      await fetchDrones();
+    } catch (error) {
+      console.error('Failed to update drone status', error);
+      alert('Unable to update status. Please retry.');
+    } finally {
+      setUpdatingDroneId(null);
+    }
+  };
+
+  const handleAssignOrder = async (drone: Drone, newOrderId: number | null) => {
+    if (!drone.id) return;
+
+    const currentOrder = getCurrentOrderForDrone(drone.id);
+    if (currentOrder?.id === newOrderId) return;
+
+    try {
+      setUpdatingDroneId(drone.id);
+
+      if (currentOrder && currentOrder.id && currentOrder.id !== newOrderId) {
+        await updateOrder(currentOrder.id, { drone: null, status: 'pending' });
+      }
+
+      if (newOrderId) {
+        await updateOrder(newOrderId, { drone: drone.id, status: 'assigned' });
+        if (!['assigned', 'delivering', 'returning'].includes(drone.status || '')) {
+          await patchDrone(drone.id, { status: 'assigned' });
+        }
+      } else if (!['maintenance', 'offline'].includes(drone.status || '')) {
+        await patchDrone(drone.id, { status: 'idle' });
+      }
+
+      await Promise.all([fetchDrones(), fetchOrders()]);
+    } catch (error) {
+      console.error('Failed to update assignment', error);
+      alert('Unable to update assignment. Please retry.');
+    } finally {
+      setUpdatingDroneId(null);
+    }
   };
 
   const openModal = (type: string, item: Drone | null = null) => {
@@ -200,15 +391,6 @@ const Drones = () => {
     setSelectedItem(null);
   };
 
-const filteredDrones = Array.isArray(drones) 
-  ? drones.filter(drone => {
-      const matchesSearch = drone.serial_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            drone.model.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = selectedStatus === 'all' || drone.status === selectedStatus;
-      return matchesSearch && matchesStatus;
-    })
-  : [];
-
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
@@ -217,7 +399,7 @@ const filteredDrones = Array.isArray(drones)
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Total Drones</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">{drones.length}</p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">{normalizedDrones.length}</p>
             </div>
             <Plane className="w-10 h-10 text-blue-500" />
           </div>
@@ -227,7 +409,7 @@ const filteredDrones = Array.isArray(drones)
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Active Now</p>
-              <p className="text-3xl font-bold text-green-600 mt-2">{filteredDrones.filter(d => ['assigned', 'delivering', 'returning'].includes(d.status || '')).length}</p>
+              <p className="text-3xl font-bold text-green-600 mt-2">{normalizedDrones.filter(d => ACTIVE_STATUSES.includes(d.status || '')).length}</p>
             </div>
             <Activity className="w-10 h-10 text-green-500" />
           </div>
@@ -238,13 +420,13 @@ const filteredDrones = Array.isArray(drones)
             <div>
               <p className="text-sm text-gray-600 mb-1">Avg Battery</p>
               <p className="text-3xl font-bold text-gray-900 mt-2">
-                {drones.length > 0 
+                {normalizedDrones.length > 0 
                   ? Math.round(
-                    drones.reduce((acc, d) => acc + (d.battery_level ?? 0), 0) / drones.length
+                    normalizedDrones.reduce((acc, d) => acc + (d.battery_level ?? 0), 0) / normalizedDrones.length
                   ) : 0}%
               </p>
             </div>
-            <Battery className={`w-10 h-10 ${getBatteryColor(drones.length > 0 ? Math.round(drones.reduce((acc, d) => acc + (d.battery_level ?? 0), 0) / drones.length) : 0)}`} />
+            <Battery className={`w-10 h-10 ${getBatteryColor(normalizedDrones.length > 0 ? Math.round(normalizedDrones.reduce((acc, d) => acc + (d.battery_level ?? 0), 0) / normalizedDrones.length) : 0)}`} />
           </div>
         </div>
 
@@ -253,7 +435,7 @@ const filteredDrones = Array.isArray(drones)
             <div>
               <p className="text-sm text-gray-600 mb-1">Maintenance</p>
               <p className="text-3xl font-bold text-yellow-600 mt-2">
-                {filteredDrones.filter(d => d.status === 'maintenance').length}
+                {normalizedDrones.filter(d => d.status === 'maintenance').length}
               </p>
             </div>
             <Settings className="w-10 h-10 text-yellow-500" />
@@ -263,8 +445,8 @@ const filteredDrones = Array.isArray(drones)
 
       {/* Search and Filters */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1 relative">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex-1 min-w-[220px] relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
@@ -278,13 +460,39 @@ const filteredDrones = Array.isArray(drones)
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[160px]"
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
+            <option value="assigned">Assigned</option>
+            <option value="delivering">Delivering</option>
+            <option value="returning">Returning</option>
+            <option value="charging">Charging</option>
             <option value="idle">Idle</option>
             <option value="maintenance">Maintenance</option>
+            <option value="offline">Offline</option>
           </select>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Sort</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortKey)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              {sortDir === 'asc' ? 'Asc' : 'Desc'}
+            </button>
+          </div>
 
           <button
             onClick={() => openModal('addDrone')}
@@ -297,6 +505,9 @@ const filteredDrones = Array.isArray(drones)
       </div>
 
       {/* Drones Table */}
+      {isLoading && (
+        <p className="text-sm text-gray-500 px-1">Refreshing fleet data…</p>
+      )}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -304,53 +515,88 @@ const filteredDrones = Array.isArray(drones)
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Base Location</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Battery</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Base Location</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Order</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Update</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredDrones.map(drone => (
-              <tr key={drone.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{drone.serial_number}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{drone.model}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(drone?.status ?? 'idle')}`}>
-                    {drone.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-gray-400" />
-                    {drone.home_base || '—'}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <div className="flex items-center space-x-2"> 
-                    <Battery 
-                      className={`w-4 h-4 ${getBatteryColor(drone.battery_level ?? 0)}`}
-                    />
-                    <span className={`font-medium ${getBatteryColor(drone.battery_level ?? 0)}`}> {drone.battery_level ?? 0}% </span>
-                  </div>
-                </td>
-                {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{drone.current_position_lat}, {drone.current_position_lng}</td> /drones/drones/{id} */}
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{drone.last_heartbeat}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <div className="flex space-x-2">
-                    <button onClick={() => openModal('viewDrone', drone)} className="text-blue-600 hover:text-blue-800">
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => openModal('editDrone', drone)} className="text-green-600 hover:text-green-800">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => openModal('deleteDrone', drone)} className="text-red-600 hover:text-red-800">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {sortedDrones.map((drone) => {
+              const currentOrder = getCurrentOrderForDrone(drone.id);
+              const availableOrders = availableOrdersForDrone(drone.id);
+
+              return (
+                <tr key={drone.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{drone.serial_number}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{drone.model}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(drone?.status ?? 'idle')}`}>
+                        {drone.status}
+                      </span>
+                      <select
+                        value={drone.status}
+                        onChange={(e) => handleStatusChange(drone.id || 0, e.target.value as Drone['status'])}
+                        disabled={!drone.id || updatingDroneId === drone.id}
+                        className="px-2 py-1 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        {DRONE_STATUS_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <div className="flex items-center space-x-2">
+                      <Battery
+                        className={`w-4 h-4 ${getBatteryColor(drone.battery_level ?? 0)}`}
+                      />
+                      <span className={`font-medium ${getBatteryColor(drone.battery_level ?? 0)}`}> {drone.battery_level ?? 0}% </span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <div className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-gray-400" />
+                      {drone.home_base || '—'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <select
+                      value={currentOrder?.id || ''}
+                      onChange={(e) => handleAssignOrder(drone, e.target.value ? Number(e.target.value) : null)}
+                      disabled={updatingDroneId === drone.id}
+                      className="w-52 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">Unassigned</option>
+                      {availableOrders.map((order) => (
+                        <option key={order.id} value={order.id}>
+                          {formatOrderLabel(order)}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{drone.current_position_lat}, {drone.current_position_lng}</td> /drones/drones/{id} */}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{drone.last_heartbeat}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <div className="flex space-x-2">
+                      <button onClick={() => openModal('viewDrone', drone)} className="text-blue-600 hover:text-blue-800">
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => openModal('editDrone', drone)} className="text-green-600 hover:text-green-800">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => openModal('deleteDrone', drone)} className="text-red-600 hover:text-red-800">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

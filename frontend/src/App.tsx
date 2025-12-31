@@ -12,12 +12,14 @@ import Drones from '@/pages/admin/Drones'
 import UsersPage from '@/pages/admin/Users'
 import Zones from '@/pages/admin/Zones'
 import Analytics from '@/pages/admin/Analytics'
+import AdminTracking from '@/pages/admin/Tracking'
 
 import FleetMonitor from '@/pages/manager/FleetMonitor'
 import Deliveries from '@/pages/manager/Deliveries'
 import ManagerZones from '@/pages/manager/Zones'
 import Weather from '@/pages/manager/Weather'
 import ManagerAnalytics from '@/pages/manager/Analytics'
+import ManagerTracking from '@/pages/manager/Tracking'
 
 import Overview from '@/pages/customer/Overview'
 import Orders from '@/pages/customer/Orders'
@@ -88,6 +90,7 @@ function AdminRoutes() {
       <Route path="users" element={<UsersPage />} />
       <Route path="zones" element={<Zones />} />
       <Route path="analytics" element={<Analytics />} />
+      <Route path="tracking" element={<AdminTracking />} />
       <Route path="logs" element={<SystemLogs />} />
     </Routes>
   )
@@ -102,6 +105,7 @@ function ManagerRoutes() {
       <Route path="zones" element={<ManagerZones />} />
       <Route path="weather" element={<Weather />} />
       <Route path="analytics" element={<ManagerAnalytics />} />
+      <Route path="tracking" element={<ManagerTracking />} />
     </Routes>
   )
 }

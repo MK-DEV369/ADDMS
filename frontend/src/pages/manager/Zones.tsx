@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   MapPin,
   Plus,
@@ -7,12 +7,10 @@ import {
   Eye,
   CheckCircle,
   AlertTriangle,
-  Settings,
   Upload,
   Download,
   XCircle,
-  AlertCircle,
-  RefreshCw
+  AlertCircle
 } from 'lucide-react'
 import { Zone } from '@/lib/types'
 import api from '@/lib/api'
@@ -184,7 +182,7 @@ export default function Zones() {
       }
       if (file.name.endsWith('.csv')) {
         const rows = text.split(/\r?\n/).filter(Boolean)
-        const [header, ...data] = rows
+        const data = rows.slice(1)
         const out: Zone[] = []
         data.forEach(line => {
           const cols = parseCsvLine(line)

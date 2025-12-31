@@ -379,7 +379,7 @@ class RouteOptimizer:
                 no_fly_zones = NoFlyZone.objects.filter(
                     boundary__intersects=bbox,
                     is_active=True
-                ).only('id', 'boundary', 'name', 'altitude_restriction')
+                ).only('id', 'boundary', 'name', 'altitude_min', 'altitude_max', 'severity')
                 
                 for zone in no_fly_zones:
                     obstacles.append({
@@ -387,14 +387,17 @@ class RouteOptimizer:
                         'id': zone.id,
                         'geometry': zone.boundary,
                         'name': getattr(zone, 'name', 'Unknown'),
-                        'altitude_max': getattr(zone, 'altitude_restriction', self.max_altitude)
+                        'severity': getattr(zone, 'severity', None),
+                        'altitude_min': getattr(zone, 'altitude_min', 0),
+                        'altitude_max': getattr(zone, 'altitude_max', self.max_altitude)
                     })
                 
                 if self.enable_debug and no_fly_zones.exists():
                     self.logger.debug(
-                        "No-fly zones loaded",
+                        "No-fly / warning zones loaded",
                         count=no_fly_zones.count(),
-                        zone_names=[z.name for z in no_fly_zones[:3]]
+                        zone_names=[z.name for z in no_fly_zones[:3]],
+                        warning_count=no_fly_zones.filter(severity='yellow').count()
                     )
             except ImportError:
                 self.logger.warning("NoFlyZone model not available")
@@ -405,11 +408,13 @@ class RouteOptimizer:
 
                 static_zones = load_static_zones(bbox)
                 for zone in static_zones:
+                    # Treat both red and yellow static zones as hard avoid
                     obstacles.append({
-                        'type': 'no_fly' if zone['severity'] == 'red' else 'advisory',
+                        'type': 'no_fly',
                         'id': f"static-{zone['name']}",
                         'geometry': zone['geometry'],
                         'name': zone['name'],
+                        'severity': zone.get('severity'),
                         'altitude_min': zone.get('altitude_min', 0),
                         'altitude_max': zone.get('altitude_max', self.max_altitude),
                         'reason': zone.get('reason', 'static_zone')

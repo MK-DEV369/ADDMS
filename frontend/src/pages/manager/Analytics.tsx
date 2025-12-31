@@ -6,7 +6,6 @@ import {
   DollarSign,
   Clock,
   Package,
-  Users,
   Activity,
   AlertCircle
 } from 'lucide-react'
@@ -33,6 +32,7 @@ export default function Analytics() {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isSimulated = true // current datasets are derived/mocked; mark explicitly
 
   useEffect(() => {
     const fetchAnalytics = async () => {
@@ -62,7 +62,7 @@ export default function Analytics() {
         // Monthly aggregation
         const monthlyMap = new Map<string, { deliveries: number; revenue: number }>()
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        months.forEach((m, i) => {
+        months.forEach((m) => {
           monthlyMap.set(m, { deliveries: Math.round(Math.random() * 100 + 150), revenue: Math.round(Math.random() * 5000 + 5000) })
         })
         const monthlyData = Array.from(monthlyMap.entries()).map(([month, data]) => ({ month, ...data })).slice(0, 6)
@@ -152,6 +152,12 @@ export default function Analytics() {
 
   return (
     <div className="space-y-6">
+      {isSimulated && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-blue-600" />
+          <p className="text-sm text-blue-800">Analytics are simulated/derived from limited logs. Replace with live telemetry/ETL before using for decisions.</p>
+        </div>
+      )}
       {error && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-yellow-600" />
@@ -229,7 +235,7 @@ export default function Analytics() {
             <BarChart3 className="w-5 h-5 text-gray-400" />
           </div>
           <div className="space-y-3">
-            {analyticsData.monthlyData.map((month, index) => (
+            {analyticsData.monthlyData.map((month) => (
               <div key={month.month} className="flex items-center justify-between">
                 <span className="text-sm text-gray-600 w-12">{month.month}</span>
                 <div className="flex-1 mx-4">
@@ -253,7 +259,7 @@ export default function Analytics() {
             <Clock className="w-5 h-5 text-gray-400" />
           </div>
           <div className="space-y-3">
-            {analyticsData.hourlyData.map((hour, index) => (
+            {analyticsData.hourlyData.map((hour) => (
               <div key={hour.hour} className="flex items-center justify-between">
                 <span className="text-sm text-gray-600 w-16">{hour.hour}</span>
                 <div className="flex-1 mx-4">

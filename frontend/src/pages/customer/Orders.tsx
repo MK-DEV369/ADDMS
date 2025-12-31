@@ -1,13 +1,23 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import {
-  Package, Search, Bell, CheckCircle, XCircle,
-  Eye, Download, LogOut, User, ChevronDown, Plus
+  Package, Search, CheckCircle, XCircle,
+  Eye, Download, Plus
 } from 'lucide-react';
 import { Order, Notification } from '../../lib/types';
-import api, { addOrder, updateOrder as apiUpdateOrder, deleteOrder as apiDeleteOrder } from '../../lib/api'
+import api, { addOrder, deleteOrder as apiDeleteOrder } from '../../lib/api'
 import { findNearestPickupLocation, PICKUP_LOCATIONS, PickupLocationWithDistance } from '../../lib/constants'
+
+const haversineDistanceKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+  const R = 6371; // km
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
 const StatusBadge: React.FC<{ status: Order['status'] }> = ({ status }) => {
   const styles = {
@@ -65,6 +75,31 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void; onCreate?:
 
   const [gettingLocation, setGettingLocation] = useState(false)
   const [selectedPickupLocation, setSelectedPickupLocation] = useState<PickupLocationWithDistance | null>(null)
+
+  const computedEstimate = useMemo(() => {
+    if (!selectedPickupLocation) return null
+    const deliveryLatNum = parseFloat(String(formData.deliveryLat))
+    const deliveryLngNum = parseFloat(String(formData.deliveryLng))
+    const weight = parseFloat(String(formData.packageWeight))
+    if (Number.isNaN(deliveryLatNum) || Number.isNaN(deliveryLngNum)) return null
+    const distanceKm = haversineDistanceKm(
+      selectedPickupLocation.coordinates.lat,
+      selectedPickupLocation.coordinates.lng,
+      deliveryLatNum,
+      deliveryLngNum
+    )
+    const effectiveWeight = Math.max(weight || 0, 0.5) // minimum billable weight 0.5 kg
+    const baseFee = 50 // INR base dispatch/handling fee
+    const perKmPerKg = 10 // INR per km per kg
+    const variableCost = distanceKm * perKmPerKg * effectiveWeight
+    const totalCost = Math.round((baseFee + variableCost) * 100) / 100
+    const cruiseSpeedKmh = 48 // 80% of 60 km/h max
+    const handlingBufferMin = 5
+    const durationMinutes = Math.round(((distanceKm / cruiseSpeedKmh) * 60 + handlingBufferMin) * 10) / 10
+    const etaIso = new Date(Date.now() + durationMinutes * 60000).toISOString()
+    console.debug('[Order Estimate] distance_km', distanceKm.toFixed(3), 'weight', effectiveWeight, 'cost', totalCost, 'duration_min', durationMinutes)
+    return { distanceKm, totalCost, durationMinutes, etaIso }
+  }, [formData.deliveryLat, formData.deliveryLng, formData.packageWeight, selectedPickupLocation])
 
   const mapDivRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<any>(null)
@@ -243,8 +278,14 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void; onCreate?:
     try {
       const res = await addOrder(payload)
       const created = res.data
-      console.debug('Order created:', created)
-      onCreate && onCreate(created)
+      const enriched = { ...created }
+      if (computedEstimate) {
+        if (!enriched.total_cost) enriched.total_cost = computedEstimate.totalCost
+        if (!enriched.estimated_duration_minutes) enriched.estimated_duration_minutes = computedEstimate.durationMinutes
+        if (!enriched.estimated_eta) enriched.estimated_eta = computedEstimate.etaIso
+      }
+      console.debug('Order created (enriched with estimates):', enriched)
+      onCreate && onCreate(enriched)
       onClose()
       setStep(1)
       // Reset form
@@ -718,7 +759,26 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void; onCreate?:
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-gray-700 font-medium">Estimated Delivery Cost</span>
-                  <span className="text-2xl font-bold text-purple-600">₹{formData.priority === 'express' ? 350 : 250}</span> {/* Distance/ETA X 10 rupees per 1 Unit of Electricity idk*/}
+                  <span className="text-2xl font-bold text-purple-600">
+                    {computedEstimate ? `₹${computedEstimate.totalCost.toFixed(2)}` : '—'}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-700 flex flex-col gap-1">
+                  <span>
+                    {computedEstimate
+                      ? `Distance: ${computedEstimate.distanceKm.toFixed(2)} km (billable weight: ${Math.max(parseFloat(String(formData.packageWeight)) || 0, 0.5)} kg)`
+                      : 'Add weight and delivery coordinates to see distance and cost'}
+                  </span>
+                  <span>
+                    {computedEstimate
+                      ? `Estimated flight time: ${computedEstimate.durationMinutes.toFixed(1)} mins`
+                      : 'ETA will appear once coordinates are set'}
+                  </span>
+                  <span>
+                    {computedEstimate
+                      ? `Predicted ETA: ${new Date(computedEstimate.etaIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : ''}
+                  </span>
                 </div>
               </div>
 
@@ -783,11 +843,10 @@ const NewOrderModal: React.FC<{ isOpen: boolean; onClose: () => void; onCreate?:
 // Main Orders Component
 export default function Orders() {
   const navigate = useNavigate();
-  const { logout, user } = useAuthStore();
+  useAuthStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showNotifications] = useState(false);
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -820,13 +879,6 @@ export default function Orders() {
     fetchOrders()
     fetchNotifications()
   }, [])
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   // // Advance status or delete handlers
   // const handleAdvanceStatus = async (order: Order) => {
@@ -958,6 +1010,7 @@ export default function Orders() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Delivery Address</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ETA / Duration</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -975,8 +1028,14 @@ export default function Orders() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <StatusBadge status={order.status} />
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {order.estimated_eta ? new Date(order.estimated_eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                    {order.estimated_duration_minutes ? ` · ${order.estimated_duration_minutes.toFixed(1)} mins` : ''}
+                    {order.route_summary?.distance_km != null ? ` · ${order.route_summary.distance_km.toFixed(2)} km` : ''}
+                    {order.route_summary?.waypoint_count != null ? ` · ${order.route_summary.waypoint_count} wp` : ''}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="font-medium text-gray-900">{order.package?.weight ? `${order.package.weight} kg` : '—'}</span>
+                    <span className="font-medium text-gray-900">{order.total_cost != null ? `₹${Number(order.total_cost).toFixed(2)}` : '—'}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                     {order.requested_at ? new Date(order.requested_at).toLocaleDateString() : '—'}

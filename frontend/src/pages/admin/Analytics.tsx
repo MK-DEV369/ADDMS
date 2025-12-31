@@ -1,13 +1,12 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import {
-  BarChart3,
   TrendingUp,
   TrendingDown,
   Activity,
   CheckCircle,
   Clock,
   CheckCircle as CheckCircleIcon,
-  Battery
+  AlertCircle,
 } from 'lucide-react';
 
 // Mock data for demonstration
@@ -41,6 +40,7 @@ console.debug('[Analytics] Using mockData for KPIs', mockData)
 console.debug('[Analytics] Using mock Bengaluru datasets (mockBengaluru)', mockBengaluru)
 
 const Analytics = () => {
+  const isSimulated = true
   const kpis = useMemo(() => ({
     activeDeliveries: mockData.activeDeliveries,
     completedToday: mockData.completedToday,
@@ -54,6 +54,12 @@ const Analytics = () => {
 
   return (
     <div className="space-y-6">
+      {isSimulated && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-blue-600" />
+          <p className="text-sm text-blue-800">Analytics are simulated/mock for now. Replace with live telemetry and ETL-backed metrics.</p>
+        </div>
+      )}
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow p-6">

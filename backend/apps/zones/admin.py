@@ -14,7 +14,7 @@ class OperationalZoneAdmin(OSMGeoAdmin):
 @admin.register(NoFlyZone)
 class NoFlyZoneAdmin(OSMGeoAdmin):
     """Admin interface for NoFlyZone"""
-    list_display = ['name', 'zone_type', 'is_active', 'valid_from', 'valid_until']
-    list_filter = ['zone_type', 'is_active', 'valid_from', 'valid_until']
+    list_display = ['name', 'zone_type', 'severity', 'is_active', 'valid_from', 'valid_until']
+    list_filter = ['zone_type', 'severity', 'is_active', 'valid_from', 'valid_until']
     search_fields = ['name', 'description']
 

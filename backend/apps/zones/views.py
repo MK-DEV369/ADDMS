@@ -61,7 +61,7 @@ class NoFlyZoneViewSet(viewsets.ModelViewSet):
     queryset = NoFlyZone.objects.all()
     serializer_class = NoFlyZoneSerializer
     permission_classes = [IsAdminOrManager]
-    filterset_fields = ['is_active', 'zone_type']
+    filterset_fields = ['is_active', 'zone_type', 'severity']
     search_fields = ['name', 'description']
     
     def perform_create(self, serializer):

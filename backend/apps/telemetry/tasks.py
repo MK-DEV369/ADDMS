@@ -7,6 +7,9 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import structlog
 
+from apps.analytics.models import SystemLog
+from .models import DroneStatusStream
+
 logger = structlog.get_logger(__name__)
 channel_layer = get_channel_layer()
 
@@ -49,12 +52,24 @@ def process_live_telemetry(self, drone_id, telemetry_data):
             gps_signal_strength=telemetry_data.get('gps_signal_strength')
         )
         
-        # Update drone current position
+        # Update drone current position/state
         drone.current_position = position
         drone.current_altitude = altitude
         drone.battery_level = telemetry_data.get('battery_level', drone.battery_level)
         drone.last_heartbeat = timezone.now()
+        drone.status = Drone.Status.IN_FLIGHT if telemetry_data.get('is_in_flight', True) else drone.status
         drone.save()
+
+        # Upsert status stream heartbeat
+        DroneStatusStream.objects.update_or_create(
+            drone=drone,
+            defaults={
+                'is_online': True,
+                'last_heartbeat': timezone.now(),
+                'connection_quality': telemetry_data.get('connection_quality', 100),
+                'current_mission_id': telemetry_data.get('mission_id')
+            }
+        )
         
         # Broadcast via WebSocket
         if channel_layer:
@@ -104,6 +119,18 @@ def process_live_telemetry(self, drone_id, telemetry_data):
             drone_id=drone.id,
             timestamp=telemetry.timestamp.isoformat()
         )
+
+        SystemLog.log(
+            level=SystemLog.LogLevel.INFO,
+            service='telemetry',
+            message=f"Telemetry updated for drone {drone.serial_number}",
+            metadata={
+                'drone_id': drone.id,
+                'timestamp': telemetry.timestamp.isoformat(),
+                'battery_level': telemetry.battery_level,
+                'speed': telemetry.speed,
+            }
+        )
         
     except Exception as exc:
         logger.error(
@@ -111,6 +138,12 @@ def process_live_telemetry(self, drone_id, telemetry_data):
             namespace="telemetry",
             drone_id=drone_id,
             error=str(exc)
+        )
+        SystemLog.log(
+            level=SystemLog.LogLevel.ERROR,
+            service='telemetry',
+            message=f"Failed telemetry ingest for drone {drone_id}",
+            metadata={'error': str(exc)}
         )
         raise
 

@@ -1,13 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Users,
   Plus,
   Search,
   Edit2,
   Trash2,
   AlertTriangle
 } from 'lucide-react';
-import api, { getUsers, addUser, deleteUser as apiDeleteUser, updateUser as apiUpdateUser } from '@/lib/api'
+import { getUsers, addUser, deleteUser as apiDeleteUser, updateUser as apiUpdateUser } from '@/lib/api'
 import { User } from '@/lib/types';
 
 const UsersPage = () => {
@@ -18,7 +17,6 @@ const UsersPage = () => {
   const [selectedItem, setSelectedItem] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   // form state for add/edit
   const [formUsername, setFormUsername] = useState('')
@@ -38,7 +36,6 @@ const UsersPage = () => {
   const fetchAllUsers = async () => {
     dbg('fetchAllUsers: begin')
     setLoading(true)
-    setError(null)
     try {
       const resp = await getUsers()
       dbg('fetchAllUsers: response', resp)
@@ -49,7 +46,6 @@ const UsersPage = () => {
       dbg('fetchAllUsers: stored users count', results.length)
     } catch (err:any) {
       dbg('fetchAllUsers: error', err)
-      setError(err?.message || 'Failed to fetch users')
     } finally {
       setLoading(false)
       dbg('fetchAllUsers: finished')

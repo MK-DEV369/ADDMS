@@ -11,6 +11,7 @@ import {
   MapPin,
   BarChart3,
   FileText,
+  Navigation,
   LogOut,
   ChevronDown,
   Cloud,
@@ -23,7 +24,6 @@ export default function DashboardLayout() {
   const location = useLocation()
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
-  const [unreadNotifications, setUnreadNotifications] = useState(3) // TODO: Connect to real notification store
 
   const handleLogout = () => {
     logout()
@@ -38,6 +38,7 @@ export default function DashboardLayout() {
     if (role === 'admin') {
       return [
         { name: 'Drones', path: '/admin/drones', icon: Plane },
+        { name: 'Tracking', path: '/admin/tracking', icon: Navigation },
         { name: 'Users', path: '/admin/users', icon: Users },
         { name: 'Zones', path: '/admin/zones', icon: MapPin },
         { name: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
@@ -48,6 +49,7 @@ export default function DashboardLayout() {
     if (role === 'manager') {
       return [
         { name: 'Fleet Monitor', path: '/manager', icon: LayoutDashboard },
+        { name: 'Tracking', path: '/manager/tracking', icon: Navigation },
         { name: 'Deliveries', path: '/manager/deliveries', icon: Package },
         { name: 'Zones', path: '/manager/zones', icon: MapPin },
         { name: 'Weather', path: '/manager/weather', icon: Cloud },

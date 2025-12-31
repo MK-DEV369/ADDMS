@@ -2,125 +2,20 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import {
-    Package, Clock, Bell, CheckCircle,
-    Loader, LogOut, User, ChevronDown, Navigation
+    Package, Clock, CheckCircle,
+    Loader, Navigation
 } from 'lucide-react';
 import Map3D from '../../components/Map3D';
-import { Drone, Notification as NotificationType, Order } from '@/lib/types';
-import { getDrones, getNoFlyZones, getOperationalZones, getOrders, getRoutes } from '@/lib/api';
-
-type MapRoute = {
-    id: number
-    path: Array<{ lat: number; lng: number; altitude: number }>
-    color?: string
-    completed?: boolean
-}
-
-type MapZone = {
-    id: number
-    name: string
-    type: 'operational' | 'no-fly'
-    polygon: Array<{ lat: number; lng: number }>
-    altitudeRange?: { min: number; max: number }
-}
-
-const parseLineString = (geojson?: string) => {
-    if (!geojson) return [] as Array<{ lat: number; lng: number; altitude: number }>
-    try {
-        const parsed = JSON.parse(geojson)
-        if (parsed?.type === 'LineString' && Array.isArray(parsed.coordinates)) {
-            return parsed.coordinates.map((coord: number[]) => ({
-                lng: coord[0],
-                lat: coord[1],
-                altitude: coord[2] ?? 80
-            }))
-        }
-    } catch (error) {
-        console.warn('Unable to parse route geometry', error)
-    }
-    return [] as Array<{ lat: number; lng: number; altitude: number }>
-}
-
-const polygonFromGeojson = (geojson?: string) => {
-    if (!geojson) return [] as Array<{ lat: number; lng: number }>
-    try {
-        const parsed = JSON.parse(geojson)
-        const rings = parsed.coordinates?.[0] || []
-        return rings.map((coord: number[]) => ({ lat: coord[1], lng: coord[0] }))
-    } catch (error) {
-        console.warn('Unable to parse zone geometry', error)
-        return []
-    }
-}
-
-const mapDronesFromApi = (items: any[]): Drone[] =>
-    items
-        .filter((d: any) => d.current_position_lat !== null && d.current_position_lng !== null)
-        .map((d: any) => ({
-            id: d.id,
-            serial_number: d.serial_number,
-            model: d.model,
-            manufacturer: d.manufacturer,
-            max_payload_weight: Number(d.max_payload_weight) || 0,
-            max_speed: Number(d.max_speed) || 0,
-            max_altitude: Number(d.max_altitude) || 0,
-            max_range: Number(d.max_range) || 0,
-            battery_capacity: Number(d.battery_capacity) || 0,
-            status: d.status,
-            battery_level: d.battery_level,
-            position: {
-                lat: Number(d.current_position_lat),
-                lng: Number(d.current_position_lng),
-                altitude: Number(d.current_altitude ?? 0)
-            },
-            heading: 0,
-            current_altitude: d.current_altitude,
-            last_heartbeat: d.last_heartbeat,
-            is_active: d.is_active,
-            created_at: d.created_at,
-            updated_at: d.updated_at,
-        }))
-
-const mapRoutesFromApi = (routeItems: any[], statusLookup: Record<number, Order['status']>): MapRoute[] =>
-    routeItems
-        .map((route: any) => {
-            const pathFromLine = parseLineString(route.path_geojson)
-            const pathFromWaypoints = (route.waypoints || []).map((wp: any) => ({
-                lng: Number(wp.lng),
-                lat: Number(wp.lat),
-                altitude: Number(wp.altitude ?? 80)
-            }))
-            const path = pathFromLine.length ? pathFromLine : pathFromWaypoints
-            if (!path.length) return null
-
-            const deliveryId = route.delivery_order_id || route.delivery_order || route.id
-            const completed = statusLookup[deliveryId] === 'delivered'
-            return {
-                id: Number(deliveryId),
-                path,
-                color: completed ? '#22c55e' : '#38bdf8',
-                completed,
-            }
-        })
-        .filter(Boolean) as MapRoute[]
-
-const mapZonesFromApi = (operational: any[], noFly: any[]): MapZone[] => {
-    const op = operational.map((zone: any) => ({
-        id: zone.id,
-        name: zone.name,
-        type: 'operational' as const,
-        polygon: polygonFromGeojson(zone.boundary_geojson),
-        altitudeRange: { min: Number(zone.altitude_min) || 0, max: Number(zone.altitude_max ?? 500) }
-    }))
-    const nf = noFly.map((zone: any) => ({
-        id: zone.id,
-        name: zone.name,
-        type: 'no-fly' as const,
-        polygon: polygonFromGeojson(zone.boundary_geojson),
-        altitudeRange: { min: Number(zone.altitude_min) || 0, max: Number(zone.altitude_max ?? 500) }
-    }))
-    return [...op, ...nf]
-}
+import { Drone, Order } from '@/lib/types';
+import { getDrones, getOrders, getRoutes } from '@/lib/api';
+import {
+    ACTIVE_ORDER_STATUSES,
+    MapRoute,
+    buildFallbackRoute,
+    mapDronesFromApi,
+    mapRoutesFromApi,
+    MapZone,
+} from '@/lib/trackingUtils';
 
 // ETA Countdown Component
 const ETACountdown: React.FC<{ eta: string | null | undefined; status: Order['status'] }> = ({ eta, status }) => {
@@ -161,42 +56,42 @@ const ETACountdown: React.FC<{ eta: string | null | undefined; status: Order['st
 // Main Tracking Component
 export default function Tracking() {
     const navigate = useNavigate();
-    const { logout, user } = useAuthStore();
+    const user = useAuthStore(state => state.user);
     const [orders, setOrders] = useState<Order[]>([]);
-    const [notifications, setNotifications] = useState<NotificationType[]>([]);
-    const [showNotifications, setShowNotifications] = useState(false);
-    const [showUserDropdown, setShowUserDropdown] = useState(false);
 
     const [drones, setDrones] = useState<Drone[]>([]);
     const [routes, setRoutes] = useState<MapRoute[]>([]);
-    const [zones, setZones] = useState<MapZone[]>([]);
+    const [zones] = useState<MapZone[]>([]);
     const [followDrone, setFollowDrone] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const activeOrders = useMemo(
-        () => orders.filter(o => ['pending', 'assigned', 'in_transit', 'delivering'].includes(o.status)),
+        () => orders.filter(o => ACTIVE_ORDER_STATUSES.includes(o.status)),
         [orders]
     );
 
+    const trackedOrder = activeOrders[0] || null;
+
     const homePosition = useMemo(() => {
-        if (activeOrders.length && activeOrders[0].delivery_lat && activeOrders[0].delivery_lng) {
+        if (trackedOrder?.delivery_lat && trackedOrder.delivery_lng) {
             return {
-                lat: Number(activeOrders[0].delivery_lat),
-                lng: Number(activeOrders[0].delivery_lng),
+                lat: Number(trackedOrder.delivery_lat),
+                lng: Number(trackedOrder.delivery_lng),
                 altitude: 1500,
             }
         }
         return { lat: 12.9716, lng: 77.5946, altitude: 5000 }
-    }, [activeOrders])
-
-    const handleLogout = () => {
-        logout();
-        navigate('/login');
-    };
+    }, [trackedOrder])
 
     useEffect(() => {
         let cancelled = false
+
+        const normalizeArray = (payload: any) => Array.isArray(payload?.results)
+            ? payload.results
+            : Array.isArray(payload)
+            ? payload
+            : []
 
         const loadLiveData = async () => {
             setLoading(true)
@@ -204,47 +99,43 @@ export default function Tracking() {
                 const [ordersRes, dronesRes] = await Promise.all([getOrders(), getDrones()])
                 if (cancelled) return
 
-                const ordersData: Order[] = ordersRes.data || []
-                const dronesData = mapDronesFromApi(dronesRes.data || [])
+                const ordersData: Order[] = normalizeArray(ordersRes.data)
+                const dronesData = mapDronesFromApi(normalizeArray(dronesRes.data))
 
                 const statusLookup = ordersData.reduce<Record<number, Order['status']>>((acc, order) => {
                     acc[order.id] = order.status
                     return acc
                 }, {})
 
-                const activeIds = ordersData
-                    .filter(o => ['pending', 'assigned', 'in_transit', 'delivering'].includes(o.status))
-                    .map(o => o.id)
+                const activeOrdersList = ordersData.filter(o => ACTIVE_ORDER_STATUSES.includes(o.status))
+                const primaryOrder = activeOrdersList[0]
 
-                const routeResponses = await Promise.all(
-                    activeIds.map(id =>
-                        getRoutes({ delivery_order: id })
-                            .then(res => res.data)
-                            .catch(() => [])
-                    )
-                )
-                const mappedRoutes = mapRoutesFromApi(routeResponses.flat(), statusLookup)
+                let mappedRoutes: MapRoute[] = []
+                let fallbackRoutes: MapRoute[] = []
 
-                let mappedZones: MapZone[] = []
-                if (user?.role === 'admin' || user?.role === 'manager') {
-                    try {
-                        const [operationalRes, noFlyRes] = await Promise.all([
-                            getOperationalZones({ is_active: true }),
-                            getNoFlyZones({ is_active: true })
-                        ])
-                        mappedZones = mapZonesFromApi(operationalRes.data || [], noFlyRes.data || [])
-                    } catch (zoneError) {
-                        console.warn('Zone fetch failed', zoneError)
-                        mappedZones = []
+                if (primaryOrder) {
+                    const routeResponse = await getRoutes({ delivery_order: primaryOrder.id })
+                        .then(res => normalizeArray(res.data))
+                        .catch(() => [])
+
+                    mappedRoutes = mapRoutesFromApi(routeResponse, statusLookup).filter(r => r.id === primaryOrder.id)
+
+                    if (!mappedRoutes.length) {
+                        const fallback = buildFallbackRoute(primaryOrder, dronesData)
+                        if (fallback) fallbackRoutes = [fallback]
                     }
                 }
 
+                const visibleDrones = primaryOrder?.drone
+                    ? dronesData.filter(d => d.id === primaryOrder.drone)
+                    : []
+
                 if (!cancelled) {
                     setOrders(ordersData)
-                    setDrones(dronesData)
-                    setRoutes(mappedRoutes)
-                    setZones(mappedZones)
+                    setDrones(visibleDrones)
+                    setRoutes([...mappedRoutes, ...fallbackRoutes])
                     setError(null)
+                    setFollowDrone(prev => visibleDrones.some(d => d.id === prev) ? prev : visibleDrones[0]?.id ?? null)
                 }
             } catch (err) {
                 if (!cancelled) {
@@ -259,7 +150,7 @@ export default function Tracking() {
         }
 
         loadLiveData()
-        const interval = setInterval(loadLiveData, 10000)
+        const interval = setInterval(loadLiveData, 5000)
         return () => {
             cancelled = true
             clearInterval(interval)
@@ -288,8 +179,12 @@ export default function Tracking() {
                         followDrone={followDrone}
                         onDroneClick={(droneId) => setFollowDrone(droneId === followDrone ? null : droneId)}
                         onZoneClick={(zoneId) => console.log('Zone clicked:', zoneId)}
+                        onCollisionDetected={(collision) => {
+                            console.error('🚨 Collision in customer tracking:', collision)
+                            // Could notify customer of delivery delay due to incident
+                        }}
                         showLabels={true}
-                        showZones={true}
+                        showZones={false}
                     />
                 </div>
 
@@ -301,40 +196,52 @@ export default function Tracking() {
                     </div>
                 )}
 
-                {!loading && activeOrders.length > 0 && (
+                {!loading && trackedOrder && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="bg-white border border-gray-200 rounded-lg p-6">
                             <h4 className="font-semibold text-gray-900 mb-4">Delivery Details</h4>
                             <div className="space-y-3">
                                 <div className="flex justify-between">
                                     <span className="text-gray-600">Order ID</span>
-                                    <span className="font-medium">{activeOrders[0].id}</span>
+                                    <span className="font-medium">{trackedOrder.id}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-gray-600">Destination</span>
-                                    <span className="font-medium text-right max-w-[240px]">{activeOrders[0].delivery_address}</span>
+                                    <span className="font-medium text-right max-w-[240px]">{trackedOrder.delivery_address}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-gray-600">Drone</span>
-                                    <span className="font-medium">{activeOrders[0].drone_serial_number || 'Unassigned'}</span>
+                                    <span className="font-medium">{trackedOrder.drone_serial_number || 'Unassigned'}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-gray-600">Package Weight</span>
-                                    <span className="font-medium">{activeOrders[0].package?.weight ?? '—'} kg</span>
+                                    <span className="font-medium">{trackedOrder.package?.weight ?? '—'} kg</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-gray-600">Status</span>
-                                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${activeOrders[0].status === 'in_transit' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
-                                            activeOrders[0].status === 'assigned' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                                                activeOrders[0].status === 'delivering' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${trackedOrder.status === 'in_transit' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                                            trackedOrder.status === 'assigned' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                                                trackedOrder.status === 'delivering' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
                                                     'bg-yellow-100 text-yellow-800 border border-yellow-200'
                                         }`}>
-                                        {['in_transit', 'delivering'].includes(activeOrders[0].status) && <Navigation className="w-3 h-3" />}
-                                        {activeOrders[0].status === 'assigned' && <CheckCircle className="w-3 h-3" />}
-                                        {activeOrders[0].status === 'pending' && <Clock className="w-3 h-3" />}
-                                        {activeOrders[0].status.replace('_', ' ').toUpperCase()}
+                                        {['in_transit', 'delivering'].includes(trackedOrder.status) && <Navigation className="w-3 h-3" />}
+                                        {trackedOrder.status === 'assigned' && <CheckCircle className="w-3 h-3" />}
+                                        {trackedOrder.status === 'pending' && <Clock className="w-3 h-3" />}
+                                        {trackedOrder.status.replace('_', ' ').toUpperCase()}
                                     </span>
                                 </div>
+                                    {trackedOrder.estimated_eta && (
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-600">Estimated Arrival</span>
+                                            <span className="font-medium">{new Date(trackedOrder.estimated_eta).toLocaleString()}</span>
+                                        </div>
+                                    )}
+                                    {trackedOrder.total_cost != null && (
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-600">Estimated Cost</span>
+                                            <span className="font-semibold text-purple-700">₹{trackedOrder.total_cost.toFixed(2)}</span>
+                                        </div>
+                                    )}
                             </div>
                         </div>
 
@@ -350,11 +257,11 @@ export default function Tracking() {
                                     </div>
                                     <div className="flex-1 pt-1">
                                         <p className="font-medium text-gray-900">Order Confirmed</p>
-                                        <p className="text-sm text-gray-500">{new Date(activeOrders[0].requested_at).toLocaleString()}</p>
+                                        <p className="text-sm text-gray-500">{new Date(trackedOrder.requested_at).toLocaleString()}</p>
                                     </div>
                                 </div>
 
-                                {activeOrders[0].assigned_at && (
+                                {trackedOrder.assigned_at && (
                                     <div className="flex gap-3">
                                         <div className="flex flex-col items-center">
                                             <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
@@ -364,7 +271,7 @@ export default function Tracking() {
                                         </div>
                                         <div className="flex-1 pt-1">
                                             <p className="font-medium text-gray-900">Drone Assigned</p>
-                                            <p className="text-sm text-gray-500">Drone {activeOrders[0].drone_serial_number || activeOrders[0].drone} assigned</p>
+                                            <p className="text-sm text-gray-500">Drone {trackedOrder.drone_serial_number || trackedOrder.drone} assigned</p>
                                         </div>
                                     </div>
                                 )}
@@ -377,7 +284,7 @@ export default function Tracking() {
                                     </div>
                                     <div className="flex-1 pt-1">
                                         <p className="font-medium text-gray-900">In Transit</p>
-                                        <ETACountdown eta={activeOrders[0].estimated_eta} status={activeOrders[0].status} />
+                                        <ETACountdown eta={trackedOrder.estimated_eta} status={trackedOrder.status} />
                                     </div>
                                 </div>
                             </div>

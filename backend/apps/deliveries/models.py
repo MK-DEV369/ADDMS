@@ -64,6 +64,8 @@ class DeliveryOrder(models.Model):
     
     # ETA & Route
     estimated_eta = models.DateTimeField(null=True, blank=True)
+    estimated_duration_minutes = models.IntegerField(null=True, blank=True, help_text="Predicted duration in minutes")
+    total_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Computed delivery cost")
     actual_delivery_time = models.DateTimeField(null=True, blank=True)
     # Route is accessed via optimized_route (reverse of OneToOneField in Route model)
     # Keeping this field for backward compatibility, but it should use optimized_route instead

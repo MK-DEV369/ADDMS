@@ -55,10 +55,21 @@ class NoFlyZone(models.Model):
         PRIVATE = 'private', _('Private Property')
         WEATHER = 'weather', _('Weather Hazard')
         TEMPORARY = 'temporary', _('Temporary Restriction')
+
+    class Severity(models.TextChoices):
+        RED = 'red', _('Red / hard no-fly')
+        YELLOW = 'yellow', _('Yellow / warning (avoid)')
     
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
     zone_type = models.CharField(max_length=20, choices=ZoneType.choices)
+    severity = models.CharField(
+        max_length=10,
+        choices=Severity.choices,
+        default=Severity.RED,
+        db_index=True,
+        help_text="red=no-fly, yellow=warning (treated as avoid)"
+    )
     boundary = gis_models.PolygonField(
         geography=True,
         srid=4326,

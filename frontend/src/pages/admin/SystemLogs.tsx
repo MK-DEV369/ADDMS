@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Download, RefreshCw, Trash2, AlertCircle } from 'lucide-react';
 import api from '@/lib/api';
 import { Log } from '@/lib/types';
@@ -7,25 +7,61 @@ const SystemLogs = () => {
   const [logs, setLogs] = useState<Log[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('all');
+  const [selectedService, setSelectedService] = useState('all');
+  const [availableServices, setAvailableServices] = useState<string[]>([
+    'backend',
+    'celery',
+    'channels',
+    'analytics',
+    'drones',
+    'deliveries',
+    'routes',
+    'telemetry',
+    'notifications',
+    'users',
+    'redis',
+    'postgres',
+    'docker',
+    'frontend',
+  ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [partialErrors, setPartialErrors] = useState<string[]>([]);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastFetched, setLastFetched] = useState<Date | null>(null);
 
-  // Fetch logs from API
+  // Fetch logs from API (single aggregated query with backend filtering)
   const fetchLogs = async () => {
     try {
       setLoading(true);
       setError('');
+      setPartialErrors([]);
       
-      // Base API already includes /api; keep path relative here to avoid double /api/api
-      let url = '/analytics/logs/?limit=100&ordering=-timestamp';
-      if (selectedLevel !== 'all') {
-        url += `&level=${selectedLevel}`;
-      }
-      
-      const response = await api.get(url);
-      const data = response.data;
-      setLogs(Array.isArray(data.results) ? data.results : Array.isArray(data) ? data : []);
+      const params: Record<string, any> = {
+        limit: 800,
+        ordering: '-timestamp',
+        ...(selectedLevel !== 'all' ? { level: selectedLevel } : {}),
+        ...(selectedService !== 'all' ? { service: selectedService } : {}),
+        ...(searchTerm ? { search: searchTerm } : {}),
+      };
+
+      const response = await api.get('/analytics/logs/', { params });
+      const payload = response.data;
+      const items: Log[] = Array.isArray(payload?.results)
+        ? payload.results
+        : Array.isArray(payload)
+        ? payload
+        : [];
+
+      const newServices = new Set<string>(availableServices);
+      items.forEach((log) => {
+        if (log.service) newServices.add(log.service);
+      });
+
+      setLogs(items);
+      setAvailableServices(Array.from(newServices));
+      setLastFetched(new Date());
+      console.debug('[SystemLogs] fetched logs', { count: items.length });
     } catch (err: any) {
       console.error('Failed to fetch logs', err);
       setError('Failed to load system logs');
@@ -36,13 +72,15 @@ const SystemLogs = () => {
 
   useEffect(() => {
     fetchLogs();
-    
+
     // Auto-refresh every 5 seconds if enabled
     if (autoRefresh) {
       const interval = setInterval(fetchLogs, 5000);
       return () => clearInterval(interval);
     }
-  }, [selectedLevel, autoRefresh]);
+
+    return () => {};
+  }, [selectedLevel, autoRefresh, selectedService, searchTerm]);
 
   const handleClearOldLogs = async () => {
     if (!confirm('Are you sure you want to clear old logs? (Keeping last 10)')) return;
@@ -116,7 +154,8 @@ const SystemLogs = () => {
                          (log.correlation_id?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                          log.service.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesLevel = selectedLevel === 'all' || log.level === selectedLevel;
-    return matchesSearch && matchesLevel;
+    const matchesService = selectedService === 'all' || log.service === selectedService;
+    return matchesSearch && matchesLevel && matchesService;
   });
 
   return (
@@ -126,6 +165,17 @@ const SystemLogs = () => {
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-600" />
           <p className="text-red-800">{error}</p>
+        </div>
+      )}
+
+      {partialErrors.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800 space-y-1">
+          <div className="font-semibold">Some services failed to load:</div>
+          <ul className="list-disc list-inside space-y-0.5">
+            {partialErrors.map((msg, idx) => (
+              <li key={idx}>{msg}</li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -154,6 +204,20 @@ const SystemLogs = () => {
             <option value="warning">Warning</option>
             <option value="error">Error</option>
             <option value="critical">Critical</option>
+          </select>
+
+          <select
+            value={selectedService}
+            onChange={(e) => setSelectedService(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Services</option>
+            {availableServices
+              .filter((svc) => svc)
+              .sort()
+              .map((svc) => (
+                <option key={svc} value={svc}>{svc}</option>
+              ))}
           </select>
 
           <label className="flex items-center gap-2 cursor-pointer">
@@ -227,6 +291,16 @@ const SystemLogs = () => {
         {filteredLogs.length === 0 ? (
           <div className="p-6 text-center text-gray-500">
             {loading ? 'Loading logs...' : 'No logs found'}
+            {!loading && !error && (
+              <div className="mt-2 text-sm text-gray-400">
+                No entries returned. Ensure backend SystemLog writes are enabled and Celery/Redis are running.
+              </div>
+            )}
+            {lastFetched && (
+              <div className="mt-1 text-xs text-gray-400">
+                Last checked: {lastFetched.toLocaleTimeString()}
+              </div>
+            )}
           </div>
         ) : (
           <table className="min-w-full divide-y divide-gray-200">

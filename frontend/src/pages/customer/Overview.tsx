@@ -219,6 +219,12 @@ export default function Overview() {
 
               <div className="flex items-center justify-between bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <ETACountdown eta={activeOrders[0].estimated_eta} status={activeOrders[0].status} />
+                {activeOrders[0].total_cost != null && (
+                  <div className="text-right text-sm">
+                    <div className="font-semibold text-white">Cost</div>
+                    <div className="text-white/90">₹{activeOrders[0].total_cost.toFixed(2)}</div>
+                  </div>
+                )}
                 <button
                   onClick={() => navigate('/customer/tracking')}
                   className="flex items-center gap-2 px-4 py-2 bg-white text-purple-600 rounded-lg hover:bg-gray-100 transition-colors font-medium"
